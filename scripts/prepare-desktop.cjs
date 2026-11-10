@@ -10,7 +10,7 @@ const manifest = require("./desktop-asset-paths.json");
 function write(file,content) { fs.mkdirSync(path.dirname(file),{recursive:true}); fs.writeFileSync(file,content); }
 const serviceSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="none"/></svg>';
 // Hidden compatibility renderers retain Clawd's state/ACK lifecycle. They do
-// not render CrossPet: the unchanged app/web frontend owns every pet visual.
+// not render CrossPet: the native app/web frontend owns every pet visual.
 const theme = {
  schemaVersion:1,name:"CrossPet task service",version:"1.0.0",viewBox:{x:0,y:0,width:16,height:16},
  states:Object.fromEntries(["idle","working","thinking","attention","error","notification","juggling","sweeping","carrying","sleeping","yawning","dozing","collapsing","waking","dizzy","roam"].map(s=>[s,["service.svg"]])),

@@ -4300,7 +4300,17 @@ function getPetPresentationSessions(source = sessions) {
 // Native CrossPet consumes the same child/wait projection as Clawd's pet,
 // while canonical sessions and permission decisions remain owned here.
 function getCrosspetPresentationSessions() {
-  return getPetPresentationSessions(projectPendingAttention());
+  const source = getPetPresentationSessions(projectPendingAttention());
+  let projected = source;
+  for (const [id, session] of source) {
+    if (session.state !== "juggling") continue;
+    const childActivity = codexSubagentPresentation.lastActivity(id);
+    if (childActivity > (Number(session.updatedAt) || 0)) {
+      if (projected === source) projected = new Map(source);
+      projected.set(id, { ...session, updatedAt: childActivity });
+    }
+  }
+  return projected;
 }
 
 function isPassivePetPresentation() {

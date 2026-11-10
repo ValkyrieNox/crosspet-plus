@@ -42,9 +42,14 @@ function projectSession(id, session, pending) {
   const raw = String(session.rawSessionId || id);
   const key = remote ? "clawd:" + crypto.createHash("sha256").update(String(id)).digest("hex").slice(0,24) : raw;
   const timestamp = Number(session.updatedAt) || Date.now();
-  return { key, character, client, pose, event: state === "attention" ? "Stop" : event,
+  const subagents = state === "juggling" ? (session.subagentTracker ? getSubagentVisualCount(session) : 1) : 0;
+  // A projected parent may still have an older Stop in its canonical history
+  // while admitted children are working. CrossPet's client routing must see
+  // the current activity, rather than treating that parent as completed.
+  const visualEvent = subagents > 0 && (event === "Stop" || event === "SessionEnd") ? "SubagentActivity" : event;
+  return { key, character, client, pose, event: state === "attention" ? "Stop" : visualEvent,
     tool, ts: timestamp > 1e11 ? timestamp / 1000 : timestamp,
-    subagents: state === "juggling" ? getSubagentVisualCount(session) : 0 };
+    subagents };
 }
 function defaultStateDir() {
   return process.env.CROSSPET_STATE_DIR || (process.platform === "win32"

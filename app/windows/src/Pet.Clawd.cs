@@ -62,7 +62,18 @@ namespace CrossPet
                 foreach (var pair in extra)
                 {
                     if (merged.TryGetValue(pair.Key, out var prior) && prior is Dictionary<string, object> old &&
-                        pair.Value is Dictionary<string, object> incoming && Number(old,"ts") >= Number(incoming,"ts") - 2) continue;
+                        pair.Value is Dictionary<string, object> incoming && Number(old,"ts") >= Number(incoming,"ts") - 2) {
+                        // Keep the native pose/event, but retain the trusted
+                        // child count carried only by the Clawd observation.
+                        var pose = old.TryGetValue("pose", out var p) ? p as string : null;
+                        var ev = old.TryGetValue("event", out var e) ? e as string : null;
+                        if (Number(incoming,"subagents") > 0 && ev != "Stop" && ev != "SessionEnd" &&
+                            pose != "asking" && pose != "idle" && pose != "sleeping" && pose != "happy" && pose != "proud") {
+                            var combined = new Dictionary<string, object>(old) { ["subagents"] = incoming["subagents"] };
+                            merged[pair.Key] = combined;
+                        }
+                        continue;
+                    }
                     merged[pair.Key] = pair.Value;
                 }
             return merged;
