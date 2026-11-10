@@ -100,6 +100,9 @@ namespace CrossPet
             menu.Items.Add(Item(clawdPending > 0 ? $"待审批（{clawdPending}）…" : "审批与等待…", () => ClawdCommand("approvals")));
             menu.Items.Add(Item("开发工具接入…", () => ClawdCommand("agents")));
             menu.Items.Add(Item("WSL / SSH 远程连接…", () => ClawdCommand("connections")));
+            menu.Items.Add(Item("任务与审批设置…", OpenTaskSettings));
+            var pauseTasks = !clawdDoNotDisturb;
+            menu.Items.Add(Item("任务免打扰", () => ClawdCommand(pauseTasks ? "pause-tasks" : "resume-tasks"), clawdDoNotDisturb));
             menu.Items.Add(Item("反馈问题…", OpenFeedback));
             if (developer)
             {

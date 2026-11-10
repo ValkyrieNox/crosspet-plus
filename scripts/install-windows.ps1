@@ -98,11 +98,24 @@ if ($loginEnabled) {
 }
 $shell = New-Object -ComObject WScript.Shell
 foreach ($folder in @([Environment]::GetFolderPath('Desktop'),[Environment]::GetFolderPath('Programs'))) {
-  foreach ($name in @('CrossPet','CrossPet Plus')) {
-    $shortcut = $shell.CreateShortcut((Join-Path $folder "$name.lnk"))
-    $shortcut.TargetPath = $exe; $shortcut.WorkingDirectory = $destination
-    $shortcut.IconLocation = (Join-Path $destination 'AppIcon.ico'); $shortcut.Save()
+  # Retire earlier duplicate launchers, preserving a verified backup. The old
+  # Clawd application/data stay on disk; only its desktop/menu entry moves.
+  foreach ($name in @('CrossPet Plus','Clawd on Desk')) {
+    $oldLink = Join-Path $folder "$name.lnk"
+    if (-not (Test-Path -LiteralPath $oldLink)) { continue }
+    $oldShortcut = $shell.CreateShortcut($oldLink)
+    $owned = [string]::Equals($oldShortcut.TargetPath, $exe, [StringComparison]::OrdinalIgnoreCase) -or
+      ((Split-Path $oldShortcut.TargetPath -Leaf) -in @('Clawd on Desk.exe','CrossPet Plus.exe'))
+    if (-not $owned -or $oldShortcut.Arguments) { Write-Warning "Unrecognized shortcut retained: $oldLink"; continue }
+    $linkBackup = Join-Path $backup ((Split-Path $folder -Leaf) + '-' + $name + '.lnk')
+    Copy-Item -LiteralPath $oldLink -Destination $linkBackup
+    if ((Get-FileHash -LiteralPath $oldLink -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $linkBackup -Algorithm SHA256).Hash) { throw "Shortcut backup mismatch: $oldLink" }
+    Remove-Item -LiteralPath $oldLink
   }
+  $shortcut = $shell.CreateShortcut((Join-Path $folder 'CrossPet.lnk'))
+  $shortcut.TargetPath = $exe; $shortcut.WorkingDirectory = $destination
+  $shortcut.IconLocation = (Join-Path $destination 'AppIcon.ico'); $shortcut.Save()
 }
 $receipt = [ordered]@{
   version = $version; installedAt = $stamp; architecture = 'native-crosspet-with-clawd-service'

@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
@@ -9,6 +11,8 @@ namespace CrossPet
 {
     static class Program
     {
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
         const string WebView2Download = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
         /// WPF 渲染线程挂了（0x88980406 UCEERR_RENDERTHREADFAILURE）：这之后窗口不会再重画，当作没事继续跑就是画面冻住
@@ -86,13 +90,18 @@ namespace CrossPet
         [STAThread]
         static void Main(string[] args)
         {
+            SetCurrentProcessExplicitAppUserModelID("com.valkyrienox.crosspet-plus");
             if (!RenderRecovery.WaitForParent(args)) return;
             if (SelfInstall && args.Length == 0 && !FromInstallDir()) return;   // 放在「只开一个」前面：已装的旧版开着时，双击新版的安装包也要能装
             // 只开一个：再次打开时让已经在跑的那个回到右下角
             using (var mutex = new Mutex(true, @"Local\CrossPet-" + Environment.UserName, out var first))
             using (var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\CrossPet-Show-" + Environment.UserName))
+            using (var taskSettings = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\CrossPet-TaskSettings-" + Environment.UserName))
             {
-                if (!first) { show.Set(); return; }
+                if (!first) {
+                    if (args.Contains("--task-settings")) taskSettings.Set(); else show.Set();
+                    return;
+                }
 
                 Directory.CreateDirectory(Store.Data);
                 RenderRecovery.Started();
@@ -134,9 +143,14 @@ namespace CrossPet
                         var env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Store.Data, "webview2"));
                         var pet = new Pet(env);
                         pet.Start();
+                        if (args.Contains("--task-settings")) pet.OpenTaskSettings();
                         new Thread(() =>
                         {
                             while (show.WaitOne()) app.Dispatcher.BeginInvoke(new Action(pet.Recenter));
+                        }) { IsBackground = true }.Start();
+                        new Thread(() =>
+                        {
+                            while (taskSettings.WaitOne()) app.Dispatcher.BeginInvoke(new Action(pet.OpenTaskSettings));
                         }) { IsBackground = true }.Start();
                     }
                     catch (Exception e)

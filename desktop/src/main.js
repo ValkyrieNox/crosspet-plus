@@ -1,9 +1,33 @@
 const { app, BrowserWindow, Notification, screen, ipcMain, globalShortcut, nativeTheme, dialog, shell, nativeImage, powerSaveBlocker, powerMonitor, clipboard, safeStorage, net } = require("electron");
+const crosspetLaunch = require("./crosspet-launch").resolveCrosspetLaunch({
+  platform: process.platform, isPackaged: app.isPackaged, execPath: process.execPath,
+  argv: process.argv, env: process.env, parentPid: process.ppid,
+  existsSync: require("node:fs").existsSync,
+  isAlive: pid => { try { process.kill(pid, 0); return true; } catch { return false; } },
+});
+if (crosspetLaunch.mode === "host" || crosspetLaunch.mode === "missing-host") {
+  if (crosspetLaunch.mode === "host") {
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    delete env.CROSSPET_HOST_PID;
+    delete env.CROSSPET_STATE_DIR;
+    const child = require("node:child_process").spawn(crosspetLaunch.host, crosspetLaunch.args,
+      { detached: true, stdio: "ignore", env });
+    child.on("error", error => console.error("CrossPet launch failed:", error.message));
+    child.unref();
+    child.once("spawn", () => app.exit(0));
+    child.once("error", () => app.exit(1));
+  } else {
+    console.error("CrossPet.exe is missing. Restore the complete CrossPet installation.");
+    app.exit(1);
+  }
+  return;
+}
 // Preserve the existing Clawd profile and its single-instance lock: the fork
 // replaces that runtime rather than competing for ~/.clawd hook ingress.
 app.setPath("userData", require("path").join(app.getPath("appData"), "clawd-on-desk"));
-app.setName("CrossPet Plus");
-const crosspetServiceMode = process.argv.includes("--crosspet-service");
+app.setName("CrossPet");
+const crosspetServiceMode = crosspetLaunch.mode === "service";
 const { startCrosspetService, backgroundPetWindowFactory } = require("./crosspet-service");
 let crosspetService = null;
 const { maybeRunPackageKoffiSmoke } = require("./package-koffi-smoke");
@@ -6336,6 +6360,9 @@ if (!gotTheLock) {
       crosspetService = startCrosspetService({
         getSessions: () => _state.getCrosspetPresentationSessions(),
         getPendingPermissions: () => pendingPermissions,
+        getInterfaceState: () => ({ trayVisible: !!tray, doNotDisturb }),
+        pauseTasks: () => enableDoNotDisturb(),
+        resumeTasks: () => disableDoNotDisturb(),
         getConnections: () => (_settingsController.get("remoteSsh")?.profiles || []).map(profile => {
           const status = _remoteSshRuntime.getProfileStatus(profile.id);
           return { profileId:profile.id, label:profile.label, status:status.status,

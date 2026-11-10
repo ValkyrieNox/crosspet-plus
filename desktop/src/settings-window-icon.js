@@ -3,7 +3,7 @@
 const path = require("path");
 
 const WINDOWS_APP_USER_MODEL_ID = "com.valkyrienox.crosspet-plus";
-const SETTINGS_WINDOW_TITLE = "CrossPet Plus Settings";
+const SETTINGS_WINDOW_TITLE = "CrossPet · 任务与审批设置";
 const SETTINGS_WINDOW_LAUNCH_ARG = "--open-settings-window";
 
 function quoteWindowsCommandArg(value) {
@@ -89,9 +89,11 @@ function getSettingsWindowTaskbarDetails({
     existsSync,
   });
 
-  const relaunchParts = [execPath];
+  const nativeHost = path.join(path.dirname(execPath || ""), "..", "CrossPet.exe");
+  const useNativeHost = isPackaged && existsSync && existsSync(nativeHost);
+  const relaunchParts = [useNativeHost ? nativeHost : execPath];
   if (!isPackaged && appPath) relaunchParts.push(appPath);
-  relaunchParts.push(SETTINGS_WINDOW_LAUNCH_ARG);
+  relaunchParts.push(useNativeHost ? "--task-settings" : SETTINGS_WINDOW_LAUNCH_ARG);
   const relaunchCommand = relaunchParts
     .filter(Boolean)
     .map(quoteWindowsCommandArg)

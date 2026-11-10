@@ -75,6 +75,7 @@ function startCrosspetService(options) {
       const signature = JSON.stringify(entries);
       if (signature !== lastSignature) { lastSignature = signature; revision++; }
       const payload = { schemaVersion:1, instance, pid:process.pid, revision, at:Date.now()/1000,
+        hostPid: ownerPid, interface: options.getInterfaceState?.() || {},
         pendingCount:options.getPendingPermissions().length, sessions:entries,
         connections: options.getConnections?.() || [], connectionOperation };
       fs.writeFileSync(snapshotFile+".tmp",JSON.stringify(payload),{mode:0o600});
@@ -97,6 +98,9 @@ function startCrosspetService(options) {
         if (request.action === "dashboard") options.openDashboard();
         else if (request.action === "connections") options.openSettings("remote-ssh");
         else if (request.action === "agents") options.openSettings("agents");
+        else if (request.action === "settings") options.openSettings();
+        else if (request.action === "pause-tasks") options.pauseTasks?.();
+        else if (request.action === "resume-tasks") options.resumeTasks?.();
         else if (request.action === "approvals") options.showApprovals();
         else if (request.action === "connection"
           && ["connect", "deploy"].includes(request.operation)

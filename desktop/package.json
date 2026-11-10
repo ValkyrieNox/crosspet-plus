@@ -1,6 +1,6 @@
 {
   "name": "crosspet-plus",
-  "version": "1.6.0-plus.4",
+  "version": "1.6.0-plus.5",
   "description": "Clawd task and approval service for the original CrossPet desktop app",
   "main": "src/main.js",
   "scripts": {

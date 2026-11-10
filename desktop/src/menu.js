@@ -219,6 +219,7 @@ module.exports = function initMenu(ctx) {
 
   // ── System tray ──
   function createTray() {
+    if (process.argv.includes("--crosspet-service")) return; // Native CrossPet owns the only tray.
     if (ctx.tray) return;
     // Shared with the completion flash so both frames keep the same size (#722).
     const icon = loadTrayNormalIcon({
@@ -228,7 +229,7 @@ module.exports = function initMenu(ctx) {
       iconPath: path.join(__dirname, "../assets/icon.png"),
     });
     ctx.tray = new Tray(icon);
-    ctx.tray.setToolTip(process.argv.includes("--crosspet-service") ? "CrossPet · tasks and approvals" : "Clawd Desktop Pet");
+    ctx.tray.setToolTip("Clawd Desktop Pet");
     buildTrayMenu();
   }
 

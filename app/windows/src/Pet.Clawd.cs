@@ -16,6 +16,8 @@ namespace CrossPet
         string clawdRevision, clawdInstance;
         DateTime clawdLaunchAt, clawdAnchorAt;
         int clawdPending;
+        bool clawdDoNotDisturb;
+        readonly HashSet<string> clawdDeferredActions = new HashSet<string>();
         bool clawdStopping;
         string ClawdSnapshot => Path.Combine(Store.State, "clawd-snapshot.json");
         string ClawdExe => Path.Combine(Store.Install, "runtime", "CrossPet Plus.exe");
@@ -45,13 +47,18 @@ namespace CrossPet
             EnsureClawdService();
             var snapshot = Store.ReadJson(ClawdSnapshot);
             if (snapshot == null || !snapshot.TryGetValue("instance", out var instance) ||
-                Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - Number(snapshot,"at")) > 8) return;
+                Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - Number(snapshot,"at")) > 8) {
+                if (!clawdStopping && bounds == null) clawdDeferredActions.Add(action);
+                return;
+            }
             var request = new Dictionary<string, object> {
                 ["instance"] = instance, ["at"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["action"] = action
             };
             if (bounds != null) request["bounds"] = bounds;
             Store.WriteJson(Path.Combine(Store.State, "clawd-commands", Guid.NewGuid().ToString("N") + ".json"), request);
         }
+
+        public void OpenTaskSettings() => ClawdCommand("settings");
 
         // Both sources use the agent's raw session id locally, so adding the
         // Clawd integration cannot turn one local conversation into two tasks.
@@ -104,6 +111,12 @@ namespace CrossPet
                 return;
             }
             clawdPending = (int)Number(data,"pendingCount");
+            if (data.TryGetValue("interface", out var interfaceState) && interfaceState is Dictionary<string, object> serviceUi)
+                clawdDoNotDisturb = serviceUi.TryGetValue("doNotDisturb", out var dnd) && dnd is bool on && on;
+            foreach (var action in clawdDeferredActions.ToArray()) {
+                clawdDeferredActions.Remove(action);
+                ClawdCommand(action);
+            }
             clawdInstance = data["instance"] as string;
             if ((DateTime.UtcNow - clawdAnchorAt).TotalSeconds > 1 && Host != null) {
                 clawdAnchorAt = DateTime.UtcNow;
