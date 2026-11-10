@@ -1,0 +1,17 @@
+{
+  "crosspet": {
+    "repository": "https://github.com/lokicorvus/crosspet",
+    "commit": "8954eb8f7f69fcfb8d35e9deceeb78e10c804402",
+    "sourceLocation": ".",
+    "codeLicense": "MIT",
+    "artLicense": "CC-BY-NC-SA-4.0"
+  },
+  "clawd": {
+    "repository": "https://github.com/rullerzhou-afk/clawd-on-desk",
+    "commit": "300d9bf8abaa2ec7559e84935a1968c67f71ef83",
+    "version": "1.6.0",
+    "sourceLocation": "desktop",
+    "codeLicense": "AGPL-3.0-only",
+    "restrictedArtworkIncluded": false
+  }
+}
