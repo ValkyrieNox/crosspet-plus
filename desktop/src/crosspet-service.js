@@ -62,7 +62,7 @@ function startCrosspetService(options) {
   const snapshotFile = path.join(dir,"clawd-snapshot.json");
   const instance = crypto.randomBytes(18).toString("hex");
   fs.mkdirSync(commands,{recursive:true,mode:0o700});
-  let lastSignature = "", revision = 0, draining = false;
+  let lastSignature = "", revision = 0, draining = false, connectionOperation = null;
   const ownerPid = Number(process.env.CROSSPET_HOST_PID);
   function publish() {
     if (Number.isSafeInteger(ownerPid) && ownerPid > 0) {
@@ -75,7 +75,8 @@ function startCrosspetService(options) {
       const signature = JSON.stringify(entries);
       if (signature !== lastSignature) { lastSignature = signature; revision++; }
       const payload = { schemaVersion:1, instance, pid:process.pid, revision, at:Date.now()/1000,
-        pendingCount:options.getPendingPermissions().length, sessions:entries };
+        pendingCount:options.getPendingPermissions().length, sessions:entries,
+        connections: options.getConnections?.() || [], connectionOperation };
       fs.writeFileSync(snapshotFile+".tmp",JSON.stringify(payload),{mode:0o600});
       fs.renameSync(snapshotFile+".tmp",snapshotFile);
     } catch (e) { options.log?.(`CrossPet bridge: ${e.message}`); }
@@ -97,6 +98,20 @@ function startCrosspetService(options) {
         else if (request.action === "connections") options.openSettings("remote-ssh");
         else if (request.action === "agents") options.openSettings("agents");
         else if (request.action === "approvals") options.showApprovals();
+        else if (request.action === "connection"
+          && ["connect", "deploy"].includes(request.operation)
+          && typeof request.profileId === "string" && request.profileId.length <= 128
+          && options.runConnectionOperation) {
+          connectionOperation = { requestId:name, profileId:request.profileId, operation:request.operation, status:"running" };
+          publish();
+          try {
+            const result = await options.runConnectionOperation(request.operation, request.profileId);
+            connectionOperation = { ...connectionOperation, status:result?.status || "error",
+              reason:result?.reason || null, step:result?.step || null,
+              hint:result?.hint || null };
+          } catch { connectionOperation = { ...connectionOperation, status:"error", reason:"connection-operation-failed" }; }
+          publish();
+        }
         else if (request.action === "anchor" && request.bounds) options.setAnchor(request.bounds);
         else if (request.action === "quit") options.quit();
       }

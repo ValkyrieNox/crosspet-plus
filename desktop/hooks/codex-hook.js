@@ -55,6 +55,7 @@ const {
 } = require("./codex-originator");
 const { fitStateBodyToByteBudget } = require("./state-payload-size");
 const { planProgressFromToolInput } = require("./codex-plan-progress");
+const { hasAutomaticCodexReviewer } = require("./codex-approval-routing");
 
 const WINDOWS_STABLE_RUN_SIGNATURE = "clawd-codex-stable-windows-run-v1";
 
@@ -525,6 +526,11 @@ function buildPermissionBody(payload, resolve, options = {}) {
   }
   if (typeof payload.transcript_path === "string" && payload.transcript_path) {
     body.transcript_path = payload.transcript_path;
+  }
+  // Only positive, current-turn evidence suppresses a passive native-flow
+  // reminder. PermissionRequest and its native no-decision fallback remain.
+  if (hasAutomaticCodexReviewer(body, { codexHome: options.codexHome || options.env?.CODEX_HOME })) {
+    body.codex_automatic_review = true;
   }
   if (typeof payload.model === "string" && payload.model) body.model = payload.model;
   if (payload.headless === true) body.headless = true;

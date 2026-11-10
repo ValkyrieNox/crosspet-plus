@@ -5,6 +5,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { resolveCodexApprovalRoute } = require("../src/codex-approval-routing");
+const { hasAutomaticCodexReviewer } = require("../hooks/codex-approval-routing");
+const { buildPermissionBody } = require("../hooks/codex-hook");
 const SESSION = "01a119d3-1893-7f42-aadc-fa33ca4166a8";
 const TURN = "01a119d7-24b5-7010-9da2-d8791ff8a1d1";
 const line = (type, payload) => JSON.stringify({ type, payload });
@@ -33,6 +35,28 @@ test("Auto can mirror a current human-reviewed shell request", (t) => {
 });
 test("Auto never blocks an automatic reviewer", (t) => {
   assert.equal(fixture(t, "auto_review").route().owner, "codex");
+});
+test("source hook marks current automatic review for shell and MCP without changing ownership", (t) => {
+  for (const tool of ["Bash", "mcp__example__read"]) {
+    const f = fixture(t, "auto_review", [], { tool_name: tool });
+    const body = buildPermissionBody({ ...f.data, hook_event_name: "PermissionRequest" },
+      () => ({}), { codexHome:f.home });
+    assert.equal(body.codex_automatic_review, true);
+    assert.equal(f.route().owner, "codex");
+  }
+});
+test("reminder suppression requires matching current-turn automatic evidence", (t) => {
+  const f = fixture(t, "auto_review");
+  const inspect = (extra = {}) => hasAutomaticCodexReviewer({ ...f.data, ...extra }, { codexHome:f.home });
+  assert.equal(inspect(), true);
+  assert.equal(inspect({ turn_id:"another-turn" }), false);
+  assert.equal(inspect({ session_id:"codex:019d23d4-f1a9-7633-b9c7-758327137228" }), false);
+  fs.appendFileSync(f.file, '{"type":"event_msg"');
+  assert.equal(inspect(), false);
+  for (const reviewer of ["user", "unknown", undefined]) {
+    const g = fixture(t, reviewer);
+    assert.equal(hasAutomaticCodexReviewer(g.data, { codexHome:g.home }), false);
+  }
 });
 test("a same-turn settings update invalidates the turn snapshot", (t) => {
   const f = fixture(t, "user", [line("event_msg", { type: "thread_settings_applied",

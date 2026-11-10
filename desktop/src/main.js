@@ -6336,6 +6336,13 @@ if (!gotTheLock) {
       crosspetService = startCrosspetService({
         getSessions: () => _state.getCrosspetPresentationSessions(),
         getPendingPermissions: () => pendingPermissions,
+        getConnections: () => (_settingsController.get("remoteSsh")?.profiles || []).map(profile => {
+          const status = _remoteSshRuntime.getProfileStatus(profile.id);
+          return { profileId:profile.id, label:profile.label, status:status.status,
+            reason:status.lastErrorReason || null, hint:status.hint || null,
+            deployed:!!profile.lastDeployedAt, retryAttempt:status.retryAttempt || 0 };
+        }),
+        runConnectionOperation: (operation, profileId) => _remoteSshIpc.runProfileMaintenance(operation, profileId),
         openDashboard: () => showDashboard(),
         openSettings: (tab) => settingsWindowRuntime.open({ tab }),
         showApprovals: () => {

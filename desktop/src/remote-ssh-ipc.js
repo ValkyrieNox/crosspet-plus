@@ -101,6 +101,7 @@ function registerRemoteSshIpc(options = {}) {
   const bootstrapIsolatedRuntimeFn = options.bootstrapIsolatedRuntimeFn || bootstrapIsolatedRuntime;
 
   const disposers = [];
+  const profileMaintenance = new Map();
   const runtimeModeSwitches = new Set();
   const destructiveProfileOperations = new Map();
   const profileActionGenerations = new Map();
@@ -468,6 +469,9 @@ function registerRemoteSshIpc(options = {}) {
 
   function handle(channel, listener) {
     ipcMain.handle(channel, listener);
+    if (channel === "remoteSsh:connect" || channel === "remoteSsh:deploy") {
+      profileMaintenance.set(channel.slice("remoteSsh:".length), listener);
+    }
     disposers.push(() => {
       try { ipcMain.removeHandler(channel); } catch {}
     });
@@ -1916,6 +1920,15 @@ function registerRemoteSshIpc(options = {}) {
   return {
     dispose,
     connectOnLaunchProfiles,
+    // The native host reuses these exact handlers. No target/config/identity
+    // overrides, migration confirmations, cleanup, revocation or approvals.
+    runProfileMaintenance: async (operation, profileId) => {
+      const listener = profileMaintenance.get(operation);
+      if (!listener || typeof profileId !== "string" || !findProfile(settingsController, profileId)) {
+        return { status: "error", reason: "invalid-profile-operation" };
+      }
+      return listener(null, { profileId });
+    },
     // Exposed for tests
     _internal: {
       buildInteractiveSshArgs,

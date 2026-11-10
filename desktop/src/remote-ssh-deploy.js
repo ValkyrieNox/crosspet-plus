@@ -102,6 +102,7 @@ const HOOK_FILES = [
   "install.js",
   "uninstall.js",
   "codex-hook.js",
+  "codex-approval-routing.js",
   "codex-originator.js",
   "codex-plan-progress.js",
   "codex-assistant-output.js",

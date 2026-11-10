@@ -280,6 +280,26 @@ test("registerRemoteSshIpc requires ipcMain", () => {
   assert.throws(() => registerRemoteSshIpc({}), /ipcMain/);
 });
 
+test("native host maintenance reuses connection guards and rejects arbitrary actions or profiles", async (t) => {
+  const rt = mockRuntime();
+  const connected = [];
+  rt.connect = profile => connected.push(profile.id);
+  const ipc = registerRemoteSshIpc({
+    ipcMain:mockIpcMain(),
+    settingsController:mockSettingsController([readyProfile, { ...baseProfile, id:"undeployed" }]),
+    remoteSshRuntime:rt,
+    BrowserWindow:mockBrowserWindow().BrowserWindow,
+    spawn:makeSucceedingSpawn().spawn,
+  });
+  t.after(() => ipc.dispose());
+  assert.equal((await ipc.runProfileMaintenance("connect", "p1")).status, "ok");
+  assert.equal((await ipc.runProfileMaintenance("connect", "undeployed")).status, "error");
+  assert.equal((await ipc.runProfileMaintenance("connect", "missing")).reason, "invalid-profile-operation");
+  assert.equal((await ipc.runProfileMaintenance("force-revoke", "p1")).reason, "invalid-profile-operation");
+  assert.equal((await ipc.runProfileMaintenance("cleanup", "p1")).reason, "invalid-profile-operation");
+  assert.deepEqual(connected, ["p1"]);
+});
+
 test("issue #1316: missing local hooks fail verify before transport, platform discovery or identity rotation", async (t) => {
   const hooksDir = fs.mkdtempSync(path.join(os.tmpdir(), "clawd-missing-hooks-"));
   t.after(() => fs.rmSync(hooksDir, { recursive: true, force: true }));

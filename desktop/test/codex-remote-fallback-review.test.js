@@ -11,7 +11,7 @@ const { waitUntil } = require("./helpers/permission-ingress-harness");
 
 const RAW_SESSION_ID = "codex:01a119d3-1893-7f42-aadc-fa33ca4166a8";
 
-function createReviewHarness(t) {
+function createReviewHarness(t, { automaticReview = false } = {}) {
   const notices = [];
   const logs = [];
   const ctx = {
@@ -79,6 +79,7 @@ function createReviewHarness(t) {
     session_id: RAW_SESSION_ID,
     host: "reported-host",
     turn_id: "01a119d7-24b5-7010-9da2-d8791ff8a1d1",
+    codex_automatic_review: automaticReview,
     tool_name: "mcp__playwright__browser_navigate",
     tool_input: { url: "https://example.com" },
   })));
@@ -114,6 +115,16 @@ test("Codex remote MCP: client-disconnected review skips the notice with an unde
 
   assert.ok(h.logs.some((message) => message.includes("request no longer actionable (client-disconnected)")));
   assert.equal(h.res.destroyed, false);
+  assert.equal(h.res.statusCode, 204);
+  assert.equal(h.res.body, "");
+  assert.equal(h.permission.pendingPermissions.length, 0);
+  assert.equal(h.notices.length, 0);
+});
+
+test("Codex automatic reviewer keeps native no-decision and omits the redundant fallback notice", async (t) => {
+  const h = createReviewHarness(t, { automaticReview:true });
+  stopActivePermissionReviews();
+  await waitUntil(() => h.res.writableFinished, "native flow did not resume");
   assert.equal(h.res.statusCode, 204);
   assert.equal(h.res.body, "");
   assert.equal(h.permission.pendingPermissions.length, 0);

@@ -1568,6 +1568,10 @@ function handlePermissionPost(req, res, options) {
 
         const queueCodexRemoteFallbackNotice = () => {
           if (typeof ctx.queueCodexRemoteFallbackForEntry !== "function") return false;
+          // The source hook can read its own current-turn transcript. A
+          // positive automatic-review hint only removes this passive notice;
+          // it cannot grant a decision or alter the native approval flow.
+          if (data.codex_automatic_review === true) return false;
           return ctx.queueCodexRemoteFallbackForEntry({
             agentId: "codex",
             sessionId,
