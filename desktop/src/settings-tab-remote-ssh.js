@@ -292,6 +292,7 @@
         port: 22,
         identityFile: "",
         sshTransportMode: "auto",
+        sshAddressFamily: "auto",
         remoteForwardPort: 23333,
         hostPrefix: "",
         autoStartCodexMonitor: false,
@@ -901,6 +902,17 @@
       || editedStatus.status === "reconnecting"
       || (editedStatus.transportPhase && editedStatus.transportPhase !== "idle");
     if (!formData.sshTransportMode) formData.sshTransportMode = "auto";
+    if (!formData.sshAddressFamily) formData.sshAddressFamily = "auto";
+    section.appendChild(selectField(
+      "remoteSshFieldAddressFamily",
+      "sshAddressFamily",
+      [
+        { value: "auto", label: t("remoteSshAddressFamilyAuto") },
+        { value: "ipv4", label: "IPv4" },
+        { value: "ipv6", label: "IPv6" },
+      ],
+      { hint: t("remoteSshAddressFamilyHint"), disabled: transportModeBusy, className: "" }
+    ));
     section.appendChild(selectField(
       "remoteSshFieldTransportMode",
       "sshTransportMode",
@@ -970,6 +982,8 @@
         host: (formData.host || "").trim(),
         remoteForwardPort: formData.remoteForwardPort,
         sshTransportMode: formData.sshTransportMode === "serialized" ? "serialized" : "auto",
+        sshAddressFamily: ["ipv4", "ipv6"].includes(formData.sshAddressFamily)
+          ? formData.sshAddressFamily : "auto",
         autoStartCodexMonitor: !!formData.autoStartCodexMonitor,
         chainStatusline: !!formData.chainStatusline,
         connectOnLaunch: !!formData.connectOnLaunch,

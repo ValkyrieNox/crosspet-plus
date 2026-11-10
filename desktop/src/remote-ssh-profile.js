@@ -349,6 +349,8 @@ function isValidId(value) {
 
 function sanitizeManagedDeployTarget(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (raw.sshAddressFamily !== undefined
+    && !["auto", "ipv4", "ipv6"].includes(raw.sshAddressFamily)) return null;
   if (raw.remotePlatform !== undefined && !isValidRemotePlatform(raw.remotePlatform)) return null;
   const target = {
     host: typeof raw.host === "string" ? raw.host.trim() : "",
@@ -356,6 +358,8 @@ function sanitizeManagedDeployTarget(raw) {
     identityFile: typeof raw.identityFile === "string" && raw.identityFile.length > 0
       ? raw.identityFile
       : undefined,
+    ...(raw.sshAddressFamily === "ipv4" || raw.sshAddressFamily === "ipv6"
+      ? { sshAddressFamily: raw.sshAddressFamily } : {}),
     remoteForwardPort: Number.isInteger(raw.remoteForwardPort) ? raw.remoteForwardPort : 23333,
     hostPrefix: typeof raw.hostPrefix === "string" && raw.hostPrefix.length > 0
       ? raw.hostPrefix
@@ -580,6 +584,10 @@ function validateProfile(profile) {
   if (!isValidSshTransportMode(profile.sshTransportMode || "auto")) {
     return { status: "error", message: "profile.sshTransportMode must be auto or serialized" };
   }
+  if (profile.sshAddressFamily !== undefined
+    && !["auto", "ipv4", "ipv6"].includes(profile.sshAddressFamily)) {
+    return { status: "error", message: "profile.sshAddressFamily must be auto, ipv4 or ipv6" };
+  }
   // Optional for backward compatibility: profiles stored before the field
   // existed simply lack it (sanitizeProfile normalizes absence to false).
   if (profile.chainStatusline !== undefined && typeof profile.chainStatusline !== "boolean") {
@@ -665,6 +673,8 @@ function sanitizeProfile(raw) {
       : undefined,
     autoStartCodexMonitor: raw.autoStartCodexMonitor === true,
     sshTransportMode: raw.sshTransportMode === "serialized" ? "serialized" : "auto",
+    sshAddressFamily: raw.sshAddressFamily === "ipv4" || raw.sshAddressFamily === "ipv6"
+      ? raw.sshAddressFamily : "auto",
     // Opt-in: on deploy, wrap a pre-existing third-party statusline on the
     // remote (chain mode) instead of leaving the quota source unregistered.
     chainStatusline: raw.chainStatusline === true,
@@ -810,6 +820,8 @@ function deployTargetFingerprint(profile) {
     host: typeof profile.host === "string" && profile.host.length > 0 ? profile.host : undefined,
     port,
     identityFile,
+    sshAddressFamily: profile.sshAddressFamily === "ipv4" || profile.sshAddressFamily === "ipv6"
+      ? profile.sshAddressFamily : "auto",
     remoteForwardPort: Number.isInteger(profile.remoteForwardPort) ? profile.remoteForwardPort : undefined,
     hostPrefix,
     chainStatusline,
@@ -834,6 +846,7 @@ const DEPLOY_TARGET_FIELDS = [
   "host",
   "port",
   "identityFile",
+  "sshAddressFamily",
   "remoteForwardPort",
   "hostPrefix",
   "chainStatusline",

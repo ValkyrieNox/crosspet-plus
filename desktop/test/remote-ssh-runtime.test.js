@@ -85,6 +85,21 @@ test("Windows OpenSSH before 8 is rejected for Remote SSH health probes", () => 
 
 // ── buildSshArgs ──
 
+test("per-profile address family applies to tunnel, interactive SSH and SCP without changing defaults", () => {
+  for (const [family, flag] of [["ipv4", "-4"], ["ipv6", "-6"]]) {
+    const profile = { host: "user@localhost", sshAddressFamily: family };
+    for (const args of [buildSshArgs(profile), buildSshArgs(profile, { interactive: true }), buildScpArgs(profile)]) {
+      assert.ok(args.includes(flag));
+      assert.ok(!args.includes(flag === "-4" ? "-6" : "-4"));
+    }
+  }
+  for (const profile of [{ host: "pi" }, { host: "pi", sshAddressFamily: "auto" }]) {
+    for (const args of [buildSshArgs(profile), buildScpArgs(profile)]) {
+      assert.ok(!args.includes("-4") && !args.includes("-6"));
+    }
+  }
+});
+
 test("buildSshArgs requires profile.host", () => {
   assert.throws(() => buildSshArgs(null), /profile\.host required/);
   assert.throws(() => buildSshArgs({}), /profile\.host required/);

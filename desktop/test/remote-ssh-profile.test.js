@@ -36,6 +36,25 @@ test("SSH transport mode defaults to auto and validates serialized override", ()
   assert.equal(validateProfile(basicProfile({ sshTransportMode: "parallel" })).status, "error");
 });
 
+test("address family survives profile persistence and changes require a disconnected, fresh deployment", () => {
+  assert.equal(sanitizeProfile(basicProfile()).sshAddressFamily, "auto");
+  for (const family of ["ipv4", "ipv6"]) {
+    assert.equal(sanitizeProfile(basicProfile({ sshAddressFamily: family })).sshAddressFamily, family);
+  }
+  for (const family of ["-4", "ipv4 -o ProxyCommand=bad", "", null, 4]) {
+    assert.equal(validateProfile(basicProfile({ sshAddressFamily: family })).status, "error");
+  }
+  const prev = basicProfile({ lastDeployedAt: 12345 });
+  const payload = basicProfile({ sshAddressFamily: "ipv4" });
+  const cmd = commandRegistry["remoteSsh.update"];
+  const deps = { snapshot: { remoteSsh: { profiles: [prev] } } };
+  assert.equal(cmd(payload, { ...deps, isRemoteSshTransportBusy: () => true }).status, "error");
+  const updated = cmd(payload, deps);
+  assert.equal(updated.status, "ok");
+  assert.equal(updated.commit.remoteSsh.profiles[0].sshAddressFamily, "ipv4");
+  assert.equal(updated.commit.remoteSsh.profiles[0].lastDeployedAt, undefined);
+});
+
 test("historical SSH transport hints are strict and local-only data", () => {
   const codespace = sanitizeSshTransportHint({
     version: 1,
@@ -790,6 +809,7 @@ test("deployTargetDrift detects each field change deterministically", () => {
     if (f === "host") changed.host = "pi2";
     else if (f === "port") changed.port = 2222;
     else if (f === "identityFile") changed.identityFile = "/k";
+    else if (f === "sshAddressFamily") changed.sshAddressFamily = "ipv4";
     else if (f === "remoteForwardPort") changed.remoteForwardPort = 23335;
     else if (f === "hostPrefix") changed.hostPrefix = "pi-prefix";
     else if (f === "chainStatusline") changed.chainStatusline = true;

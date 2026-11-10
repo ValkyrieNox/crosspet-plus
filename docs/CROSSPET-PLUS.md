@@ -63,6 +63,8 @@ Codex 的自动审核不会额外触发“回到远端审批”的被动提醒�
 
 直接调用任意 API 或网页聊天没有提供 hook／状态事件时无法自动感知。实际模型没有上报时不猜测中转服务的后端。
 
+Remote SSH 每条连接可独立选择自动、IPv4 或 IPv6，应用于连接、探测、部署、SCP 与交互终端。Windows 上 `localhost` 的 IPv6 超时时，WSL 连接可选 IPv4；其他主机仍沿用自己的配置。修改须先断开，并重新部署验证目标；该选项不改全局 SSH 配置，也不绕过主机身份验证。
+
 ## 安装、升级与回退
 
 Windows 程序安装在 `%LOCALAPPDATA%\Programs\CrossPet`。CrossPet 数据在 `%LOCALAPPDATA%\CrossPet`，Clawd 设置与既有 SSH 配置仍在 `%APPDATA%\clawd-on-desk` 和 `~/.clawd`。

@@ -145,6 +145,8 @@ test("inspection waits for close rather than exit", async () => {
 test("local target fingerprint changes with transport-affecting fields", () => {
   const base = { host: "space", port: 22, sshTransportMode: "auto" };
   assert.notEqual(localTargetFingerprint(base), localTargetFingerprint({ ...base, port: 2222 }));
+  assert.notEqual(localTargetFingerprint(base), localTargetFingerprint({ ...base, sshAddressFamily: "ipv4" }));
+  assert.equal(localTargetFingerprint(base), localTargetFingerprint({ ...base, sshAddressFamily: "auto" }));
   assert.notEqual(localTargetFingerprint(base), localTargetFingerprint({ ...base, sshTransportMode: "serialized" }));
 });
 

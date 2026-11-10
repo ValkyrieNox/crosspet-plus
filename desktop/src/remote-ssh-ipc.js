@@ -1567,6 +1567,7 @@ function registerRemoteSshIpc(options = {}) {
           host: profile.host,
           port: profile.port,
           identityFile: profile.identityFile,
+          sshAddressFamily: profile.sshAddressFamily || "auto",
           remoteForwardPort: profile.remoteForwardPort,
           hostPrefix: profile.hostPrefix,
           chainStatusline: profile.chainStatusline,

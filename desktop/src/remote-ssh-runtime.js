@@ -182,6 +182,8 @@ function buildSshArgs(profile, { extraOpts = [], interactive = false } = {}) {
     ? SSH_INTERACTIVE_BASE_OPTS.slice()
     : SSH_BASE_OPTS.slice();
   appendRemoteSshConfigArgs(args);
+  if (profile.sshAddressFamily === "ipv4") args.push("-4");
+  else if (profile.sshAddressFamily === "ipv6") args.push("-6");
   if (profile.identityFile) args.push("-i", profile.identityFile);
   if (profile.port && profile.port !== 22) args.push("-p", String(profile.port));
   args.push(...extraOpts);
@@ -196,6 +198,8 @@ function buildScpArgs(profile, { extraOpts = [] } = {}) {
   }
   const args = SCP_BASE_OPTS.slice();
   appendRemoteSshConfigArgs(args);
+  if (profile.sshAddressFamily === "ipv4") args.push("-4");
+  else if (profile.sshAddressFamily === "ipv6") args.push("-6");
   if (profile.identityFile) args.push("-i", profile.identityFile);
   if (profile.port && profile.port !== 22) args.push("-P", String(profile.port));
   args.push(...extraOpts);

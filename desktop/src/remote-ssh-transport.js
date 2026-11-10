@@ -174,6 +174,8 @@ function localTargetFingerprint(profile) {
     host: profile && profile.host || "",
     port: Number.isInteger(profile && profile.port) ? profile.port : 22,
     identityFile: profile && profile.identityFile || "",
+    sshAddressFamily: profile && ["ipv4", "ipv6"].includes(profile.sshAddressFamily)
+      ? profile.sshAddressFamily : "auto",
     sshConfigFile: getRemoteSshConfigFile() || "",
     sshTransportMode: profile && profile.sshTransportMode === "serialized"
       ? "serialized"
