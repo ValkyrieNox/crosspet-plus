@@ -1678,6 +1678,23 @@ function setForeground(f) { foreground = f && typeof f === 'object' ? { ...f } :
 function setRunning(keys) { runningKeys = Array.isArray(keys) ? new Set(keys) : null; updateCompanions() }
 // 由外壳调：按客户端的状态（<角色>@<客户端>-state.json，开关打开时才交）。
 // 主桌宠只演她占着的那个客户端；还没占着任何客户端（她这个角色还没有会话）时照旧演。代演（reactTo）的角色各客户端都由她演
+// A disconnected Plus backend must not leave an asking pose or block legacy native hooks.
+// Only values tagged by that exact backend instance are removed; native/newer observations survive.
+function clearClawdState(character, client, instance, keepClientMode) {
+  let visible = false, removed = false
+  for (const [id, s] of Object.entries(charState)) {
+    if (s?._crosspetPlus !== instance || s.character !== character || s.client !== client) continue
+    delete charState[id]
+    removed = true
+    if (id === charId) visible = true
+  }
+  if (!keepClientMode && (removed || !charState[character]?._crosspetPlus)) delete clientStateSeen[character]
+  if (visible && !egg && !multi && !devHeld() && !devActive && !updatingNow) {
+    clearTimeout(thinkTimer); clearTimeout(pending); clearTimeout(revertTimer)
+    show(restPose(), true); say('')
+  }
+  refreshMulti()
+}
 function applyClientState(character, client, s) {
   if (!companionsActive() || !s || !character || !client) return
   clientStateSeen[character] = true

@@ -21,6 +21,7 @@ extension App {
 
     /// 扫描 characters/<id>/：character.json + 立绘（.webp / .png）。文件名去掉 -2、-3 后缀是姿态名，idle-blink 是眨眼帧。
     func loadCharacters() {
+        if isPlus { clawdPresentation.resetPlayback(); clawdSessionSignature = "" }
         followEventGeneration &+= 1
         var chars: [String: Any] = [:]
         appToCharacter = [:]

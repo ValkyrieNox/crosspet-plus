@@ -83,6 +83,22 @@ extension App {
         layerItem.submenu = layerMenu
         menu.addItem(layerItem)
         add(menu, "设置…", #selector(openSettings))
+        if isPlus {
+            menu.addItem(.separator())
+            add(menu, "任务与会话面板…", #selector(openClawdDashboard))
+            let count = clawdPresentation.snapshot?.pendingCount ?? 0
+            add(menu, count > 0 ? "审批与等待（\(count)）…" : "审批与等待…", #selector(openClawdApprovals))
+            add(menu, "开发工具接入…", #selector(openClawdAgents))
+            add(menu, "SSH 远程连接…", #selector(openClawdConnections))
+            add(menu, "任务与审批设置…", #selector(openClawdSettings))
+            let taskPause = add(menu, "任务免打扰", #selector(toggleClawdDoNotDisturb))
+            taskPause.state = clawdPresentation.snapshot?.doNotDisturb == true ? .on : .off
+            if clawdBridge.failure != nil {
+                let status = NSMenuItem(title: "任务后台不可用，请点击上方入口重试", action: nil, keyEquivalent: "")
+                menu.addItem(status)
+            }
+            menu.addItem(.separator())
+        }
         add(menu, "反馈问题…", #selector(openFeedback))
         if NSEvent.modifierFlags.contains(.option) {  // 按住 ⌥ 右键才出现：给自己换立绘、加角色的人检查效果用
             add(menu, "开发者控制台…", #selector(openDevConsole))

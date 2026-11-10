@@ -168,7 +168,12 @@ export function apply(ctx, config = {}) {
         if (!existsSync(exe)) return noteAutostart(source, `不打开：没找到 ${exe}`);
         child = spawn(exe, [], { detached: true, stdio: "ignore", cwd: dirname(exe) });
       } else if (process.platform === "darwin") {
-        child = spawn("/usr/bin/open", ["-g", "-b", "io.github.crosspet"], { detached: true, stdio: "ignore" });
+        let bundleId = "io.github.crosspet";
+        try {
+          const preferred = readFileSync(join(appData, "native-bundle-id"), "utf8").trim();
+          if (preferred === "io.github.crosspet" || preferred === "com.valkyrienox.crosspet-plus.native") bundleId = preferred;
+        } catch {}
+        child = spawn("/usr/bin/open", ["-g", "-b", bundleId], { detached: true, stdio: "ignore" });
       } else return;
       child.on("error", (e) => noteAutostart(source, `打开失败：${String(e?.message ?? e)}`));
       child.unref();

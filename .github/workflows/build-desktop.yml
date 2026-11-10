@@ -1,4 +1,4 @@
-name: Build native CrossPet Plus for Windows
+name: Build native CrossPet Plus
 on:
   workflow_dispatch:
   push:
@@ -6,6 +6,28 @@ on:
 permissions:
   contents: read
 jobs:
+  macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm run setup
+      - run: npm run test:plus
+      - run: npm run test:mac:bridge
+      - run: npm run build:mac -- --arch=${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CrossPet-Plus-macOS-${{ matrix.arch }}
+          path: build/CrossPet-Plus-*-macOS-${{ matrix.arch }}.zip
+          if-no-files-found: error
   windows:
     runs-on: windows-latest
     steps:

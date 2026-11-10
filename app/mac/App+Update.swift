@@ -62,7 +62,9 @@ extension App {
     }
     /// 依次看这些版本的 macOS 安装包在不在，回调第一个在的（都不在就 nil）
     func firstWithAsset(_ tags: [String], done: @escaping (String?) -> Void) {
-        guard let tag = tags.first, let url = URL(string: "https://github.com/\(repoSlug)/releases/download/\(tag)/CrossPet-macOS.zip") else { done(nil); return }
+        guard let tag = tags.first else { done(nil); return }
+        let asset = isPlus ? PlusDistribution.assetName(tag: tag, arch: Bundle.main.object(forInfoDictionaryKey: "CrossPetPlusArch") as? String ?? "") : "CrossPet-macOS.zip"
+        guard let asset, let url = URL(string: "https://github.com/\(repoSlug)/releases/download/\(tag)/\(asset)") else { done(nil); return }
         var req = URLRequest(url: url, timeoutInterval: 15); req.httpMethod = "HEAD"
         URLSession.shared.dataTask(with: req) { [weak self] _, res, _ in
             if ((res as? HTTPURLResponse)?.statusCode ?? 0) == 200 { done(tag) } else { self?.firstWithAsset(Array(tags.dropFirst()), done: done) }
@@ -77,6 +79,13 @@ extension App {
             guard let self = self else { return }
             let obj = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             if let tag = obj?["tag_name"] as? String, !tag.isEmpty {
+                if self.isPlus {
+                    let expected = PlusDistribution.assetName(tag: tag, arch: Bundle.main.object(forInfoDictionaryKey: "CrossPetPlusArch") as? String ?? "")
+                    let assets = obj?["assets"] as? [[String: Any]] ?? []
+                    guard let expected, assets.contains(where: { $0["name"] as? String == expected }) else {
+                        self.gotLatest("", page: nil, manual: manual); return
+                    }
+                }
                 self.gotLatest(tag, page: (obj?["html_url"] as? String).flatMap(URL.init(string:)), manual: manual)
                 return
             }
@@ -85,7 +94,10 @@ extension App {
             URLSession.shared.dataTask(with: URLRequest(url: latest, timeoutInterval: 15)) { [weak self] _, res, _ in
                 let path = res?.url?.path ?? ""
                 let tag = path.range(of: "/tag/").map { String(path[$0.upperBound...]) } ?? ""
-                self?.gotLatest(tag, page: res?.url, manual: manual)
+                guard let self else { return }
+                if self.isPlus {
+                    self.firstWithAsset([tag]) { found in self.gotLatest(found ?? "", page: res?.url, manual: manual) }
+                } else { self.gotLatest(tag, page: res?.url, manual: manual) }
             }.resume()
         }.resume()
     }
@@ -100,7 +112,7 @@ extension App {
                     self.pushSettings()
                 } else if manual {
                     let alert = NSAlert()
-                    alert.messageText = tag.isEmpty ? "暂时连不上 GitHub" : "已经是最新版（\(self.currentVersion)）"
+                    alert.messageText = tag.isEmpty ? (self.isPlus ? "暂未找到可用的 Mac Plus 更新包，或无法连接 GitHub" : "暂时连不上 GitHub") : "已经是最新版（\(self.currentVersion)）"
                     NSApp.activate(ignoringOtherApps: true)
                     alert.runModal()
                 }
@@ -110,11 +122,13 @@ extension App {
     // 一键更新：在后台跑一遍官方安装命令（get.sh：下载最新的 macOS 安装包 → 替换 App → 按新版刷新已接入的 AI → 重新打开），
     // 和用户自己在终端里运行那条命令完全一样，只是不再逐个问要接入哪些 AI。只在装在默认位置（应用程序文件夹）时提供
     var canSelfUpdate: Bool {
+        if isPlus { return false } // The upstream installer would replace the combined app with the original Mac app.
         let dir = Bundle.main.bundleURL.deletingLastPathComponent().standardizedFileURL.path
         return dir == "/Applications" || dir == FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").standardizedFileURL.path
     }
 
     @objc func selfUpdate() {
+        if isPlus { openRelease(); return }
         guard !updating, let r = latestRelease else { return }
         let alert = NSAlert()
         alert.messageText = "更新到 \(r.tag)？"

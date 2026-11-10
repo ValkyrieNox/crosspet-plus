@@ -26,7 +26,12 @@ function chunk(type,data){const t=Buffer.from(type);const n=Buffer.alloc(4);n.wr
 function png(size){const raw=Buffer.alloc((size*4+1)*size);for(let y=0;y<size;y++){for(let x=0;x<size;x++){const dx=x/size-.5,dy=y/size-.5;const i=y*(size*4+1)+1+x*4;const circle=dx*dx+dy*dy<.22;const c=(dx*dx+dy*dy<.115&&dx*dx+dy*dy>.055&&!(dx>.08&&Math.abs(dy)<.15));raw[i]=c?240:72;raw[i+1]=c?248:125;raw[i+2]=c?255:224;raw[i+3]=circle?255:0;}}const h=Buffer.alloc(13);h.writeUInt32BE(size);h.writeUInt32BE(size,4);h[8]=8;h[9]=6;return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk("IHDR",h),chunk("IDAT",zlib.deflateSync(raw)),chunk("IEND",Buffer.alloc(0))]);}
 const icon=png(256);
 for(const relative of manifest.png) write(path.join(assets,relative),icon);
-for(const name of ["icon.png","dock-icon.png","tray-icon.png","tray-iconTemplate.png","tray-iconTemplate@2x.png"]) write(path.join(assets,name),icon);
+for(const name of ["icon.png","dock-icon.png"]) write(path.join(assets,name),icon);
+for(const name of ["tray-icon.png","tray-icon-flash.png"]) write(path.join(assets,name),png(32));
+for(const name of ["tray-iconTemplate","tray-icon-flashTemplate"]) {
+  write(path.join(assets,`${name}.png`),png(18));
+  write(path.join(assets,`${name}@2x.png`),png(36));
+}
 for(const size of [16,32,48,64,128,256,512]) write(path.join(assets,"icons",`${size}x${size}.png`),png(size));
 const ico=Buffer.alloc(22);ico.writeUInt16LE(1,2);ico.writeUInt16LE(1,4);ico[6]=0;ico[7]=0;ico.writeUInt16LE(1,10);ico.writeUInt16LE(32,12);ico.writeUInt32LE(icon.length,14);ico.writeUInt32LE(22,18);write(path.join(assets,"icon.ico"),Buffer.concat([ico,icon]));
 for(const relative of manifest.svg){

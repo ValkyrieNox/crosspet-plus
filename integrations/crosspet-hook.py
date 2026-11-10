@@ -240,7 +240,14 @@ def ensure_pet() -> str:
         except Exception:
             pass
         # -g：在后台打开，不抢你正在用的窗口的焦点
-        subprocess.Popen(["/usr/bin/open", "-g", "-b", "io.github.crosspet"], start_new_session=True, **quiet)
+        bundle_id = "io.github.crosspet"
+        try:
+            preferred = (data / "native-bundle-id").read_text(encoding="utf-8").strip()
+            if preferred in ("io.github.crosspet", "com.valkyrienox.crosspet-plus.native"):
+                bundle_id = preferred
+        except (OSError, UnicodeError):
+            pass
+        subprocess.Popen(["/usr/bin/open", "-g", "-b", bundle_id], start_new_session=True, **quiet)
         return fresh_note + "已打开"
 
 

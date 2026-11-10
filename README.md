@@ -2,7 +2,7 @@
 
 **以 CrossPet 原生桌宠为主体，增加 Clawd 的开发任务、审批与 WSL／SSH 连接。**
 
-这是个人使用的非官方衍生版。Windows 主程序仍然是 CrossPet 的 WPF + WebView2 应用，直接使用原版 `app/web/` 页面、角色和互动逻辑；`desktop/` 中的 Clawd 作为随程序启动的后台服务。不是把 CrossPet 的图片放进 Clawd 桌宠。
+这是个人使用的非官方衍生版。Windows 使用 CrossPet 的 WPF + WebView2 应用，macOS 使用原生 Swift + WKWebView 应用；两端直接使用原版 `app/web/` 页面、角色和互动逻辑，`desktop/` 中的 Clawd 作为随程序启动的后台服务。
 
 ![CrossPet 角色](docs/images/characters.webp)
 
@@ -24,22 +24,22 @@ Clawd 的隐藏兼容渲染窗口只供其内部状态生命周期使用；实�
 
 ## 使用
 
-运行 **CrossPet.exe**。右键菜单保留原版功能，并增加：
+Windows 运行 **CrossPet.exe**，macOS 打开 **CrossPet.app**。右键菜单保留原版功能，并增加：
 
 - 任务与会话面板
 - 审批与等待
 - 开发工具接入
-- WSL / SSH 远程连接
+- 远程连接（Windows：WSL / SSH；macOS：SSH）
 
 原版 **设置** 管 CrossPet 外观和互动；新增菜单打开 Clawd 功能窗口。不要同时运行独立的 Clawd 或早期使用 Clawd 外壳的 CrossPet Plus。
 
-Windows 桌宠连接本机、WSL 和 SSH 上的代理；远端无需运行 GUI。模型切换依赖代理实际提供的模型标签，中转隐藏模型时不能推测后端。
+两端都可连接本机和 SSH 上的代理，Windows 另支持 WSL；远端无需运行 GUI。模型切换依赖代理实际提供的模型标签，中转隐藏模型时不能推测后端。
 
 DSH 里的“鲸鲸”人格、记忆、QQ 和 B 站配置独立于本项目。
 
 ## 构建与启动
 
-要求 Node.js 22.12+、.NET 8 SDK、Python 3、Windows WebView2 Runtime。构建脚本可在 Windows 或 WSL 运行。
+Windows 构建要求 Node.js 22.12+、.NET 8 SDK、Python 3、Windows WebView2 Runtime。构建脚本可在 Windows 或 WSL 运行。
 
 ```sh
 npm run setup
@@ -51,7 +51,19 @@ npm run build:win       # 同时生成完整 zip
 
 `npm start` 在 Windows／WSL 打开 Windows 原生 CrossPet。`DOTNET` 可指定 .NET SDK 可执行文件。
 
-目前增强版的打包和接入代码针对 **Windows 桌面 + 本机／WSL／SSH 代理**。原 CrossPet 的 macOS 源码完整保留，`npm run build:mac:upstream` 构建的是原生 Mac 版，不包含本次 Windows 后台桥接；没有增强版 Linux GUI 构建。
+macOS 构建要求 macOS 13+、Xcode Command Line Tools、Node.js 22.12+：
+
+```sh
+npm run setup
+npm run build:mac              # 本机架构：原生桌宠 + 内嵌 Clawd 后台 + zip
+npm start                      # 打开本机构建的 Mac Plus 应用
+```
+
+Apple 芯片产物为 `build/macos-arm64/CrossPet.app` 和 `build/CrossPet-Plus-<版本>-macOS-arm64.zip`；Intel 用 `npm run build:mac -- --arch=x64`，产物在 `build/macos-x64/`。`build:mac:dir` 只构建目录；`build:mac:upstream` 继续只构建上游原生版。完整应用内嵌 Electron，启动无需另装 Electron；各代理的 CLI / hook 依赖仍按对应接入要求安装。
+
+Mac Plus 支持任务与会话面板、审批与等待、本机开发工具接入、SSH 连接，以及主任务和子代理的桌宠动作。已有独立 Clawd 必须先退出，避免共用配置和单实例锁冲突；不会自动关闭其他应用。原生外观配置首次从原版导入，后台沿用既有 Clawd 配置；已有且启用的集成会按 Clawd 原有逻辑同步。
+
+Mac Plus 更新只识别本仓库对应架构的组合包，当前通过发布页手动更新，避免被上游原版覆盖。构建使用本机临时签名，未做 Apple Developer ID 公证。详见 [Mac Plus 说明](docs/macos-plus.md)。没有增强版 Linux GUI 构建。
 
 ## 来源与授权
 

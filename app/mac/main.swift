@@ -77,8 +77,44 @@ if let i = CommandLine.arguments.firstIndex(of: "--companion-seq-probe") {
     exit(0)
 }
 
+// Probe the actual packaged native menu without starting integrations or touching runtime files.
+if CommandLine.arguments.contains("--crosspet-native-menu-probe") {
+    _ = NSApplication.shared
+    let probe = App()
+    let entries = probe.buildMenu().items.compactMap { item -> [String: String]? in
+        guard let action = item.action else { return nil }
+        return ["title": item.title, "action": NSStringFromSelector(action)]
+    }
+    let result: [String: Any] = ["plus": probe.isPlus, "entries": entries, "repo": probe.repoSlug,
+        "canSelfUpdate": probe.canSelfUpdate, "runtimeExists": FileManager.default.isExecutableFile(atPath: probe.plusExecutable.path)]
+    print(ClawdSnapshot.json(result)); exit(0)
+}
+
 let app = NSApplication.shared
 let delegate = App()
+if delegate.isPlus {
+    do {
+        delegate.plusHostLock = try PlusHostLock(directory: delegate.plusStateDir)
+        if delegate.plusHostLock?.acquired != true {
+            if let id = Bundle.main.bundleIdentifier {
+                NSRunningApplication.runningApplications(withBundleIdentifier: id)
+                    .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }?
+                    .activate(options: [.activateIgnoringOtherApps])
+            }
+            exit(0)
+        }
+        if !defaults.bool(forKey: "plusNativePrefsImported"), let id = Bundle.main.bundleIdentifier {
+            let original = defaults.persistentDomain(forName: "io.github.crosspet") ?? [:]
+            let current = defaults.persistentDomain(forName: id) ?? [:]
+            var imported = PlusDistribution.importPreferences(original: original, current: current)
+            imported["plusNativePrefsImported"] = true
+            defaults.setPersistentDomain(imported, forName: id)
+        }
+    } catch {
+        let alert = NSAlert(); alert.messageText = "无法启动 CrossPet Plus"
+        alert.informativeText = error.localizedDescription; alert.runModal(); exit(1)
+    }
+}
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
 app.run()

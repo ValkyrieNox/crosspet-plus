@@ -356,7 +356,8 @@ extension App {
             stamps[key + "-state"] = stamp
             if Date().timeIntervalSince(stamp) > 600 { continue }   // 和按角色的一样：只认 10 分钟内的
             guard let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8),
-                  (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { continue }
+                  let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
+            if isPlus, !clawdPresentation.nativeIsCurrent(character: character, client: client, state: state, now: Date().timeIntervalSince1970) { continue }
             clientStateSeen.insert(character)
             clientStates[key] = (text, stamp)
             if pauseRealEvents { continue }

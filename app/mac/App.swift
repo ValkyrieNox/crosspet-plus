@@ -8,6 +8,13 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var web: WKWebView!
     var timer: Timer?
     var quotaTimer: Timer?
+    var plusHostLock: PlusHostLock?
+    let clawdPresentation = ClawdPresentation()
+    var clawdSessionSignature = ""
+    var clawdRenderedStates: [String: [String: Any]] = [:]
+    var clawdAnchorAt = Date.distantPast
+    lazy var clawdBridge = ClawdBridge(directory: plusStateDir, executable: plusExecutable,
+                                      log: { [weak self] in self?.appLog($0) })
     var followEventGeneration: UInt64 = 0
     var ready = false {
         didSet { if ready != oldValue { followEventGeneration &+= 1 } }
@@ -46,7 +53,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
 
     // 更新 用的
-    let repoSlug = "lokicorvus/crosspet"
+    var repoSlug: String { isPlus ? "ValkyrieNox/crosspet-plus" : "lokicorvus/crosspet" }
     var lastUpdateCheck = "还没查过"
     var updating = false
 
@@ -199,6 +206,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         panel.contentView = container
         panel.orderFrontRegardless()
+        if isPlus { _ = clawdBridge.poll() }
         setupStatusItem()
         registerHotKey()
 

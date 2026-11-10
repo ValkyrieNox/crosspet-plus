@@ -18,10 +18,15 @@ extension App {
     }
     func markLaunched() {
         try? FileManager.default.removeItem(at: userQuitFlag)
+        // Native hooks should reopen the variant the user actually launched.
+        if let identifier = Bundle.main.bundleIdentifier {
+            try? identifier.write(to: root.appendingPathComponent("native-bundle-id"), atomically: true, encoding: .utf8)
+        }
         try? FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
         try? String(ProcessInfo.processInfo.processIdentifier).write(to: stateDir.appendingPathComponent("pet.pid"), atomically: true, encoding: .utf8)
     }
     func applicationWillTerminate(_ note: Notification) {
+        if isPlus { clawdBridge.stop() }
         try? FileManager.default.removeItem(at: stateDir.appendingPathComponent("pet.pid"))
     }
 

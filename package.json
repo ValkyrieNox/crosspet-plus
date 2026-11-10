@@ -12,6 +12,10 @@
     "build:win": "node scripts/build-windows.cjs",
     "build:win:dir": "node scripts/build-windows.cjs --dir",
     "build:service:win": "npm run prepare:desktop && npm --prefix desktop run build:win:dir",
+    "build:mac": "node scripts/build-macos.cjs",
+    "build:mac:dir": "node scripts/build-macos.cjs --dir",
+    "test:mac:bridge": "sh tests/macos_plus_bridge.sh",
+    "test:plus": "node --test tests/crosspet_service.test.js tests/macos_plus_build.test.js",
     "build:mac:upstream": "bash app/build.sh"
   },
   "engines": { "node": ">=22.12.0" }

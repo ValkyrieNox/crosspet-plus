@@ -75,7 +75,8 @@ function startCrosspetService(options) {
       const signature = JSON.stringify(entries);
       if (signature !== lastSignature) { lastSignature = signature; revision++; }
       const payload = { schemaVersion:1, instance, pid:process.pid, revision, at:Date.now()/1000,
-        hostPid: ownerPid, interface: options.getInterfaceState?.() || {},
+        hostPid:Number.isSafeInteger(ownerPid) && ownerPid > 0 ? ownerPid : null,
+        interface: options.getInterfaceState?.() || {},
         pendingCount:options.getPendingPermissions().length, sessions:entries,
         connections: options.getConnections?.() || [], connectionOperation };
       fs.writeFileSync(snapshotFile+".tmp",JSON.stringify(payload),{mode:0o600});

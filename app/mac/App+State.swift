@@ -9,6 +9,7 @@ extension App {
     /// 读 /tmp/crosspet/<id>-state.json 和 <id>-quota.json，有变化就交给画面。
     func pollStates() {
         guard ready else { return }
+        pollClawdService()
         var latestActive: (id: String?, ts: Double) = (nil, 0)
         // current：多模型宿主（WorkBuddy）里没有对应角色的模型，由当前角色来演；它只有状态，没有额度
         for id in characterIds + ["current"] {
@@ -22,8 +23,16 @@ extension App {
                 // 状态只认 10 分钟内的，免得开机读到旧状态
                 if kind == "state", Date().timeIntervalSince(stamp) > 600 { notePet(id, nil, "skipped", "stale"); continue }
                 guard let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) else { continue }
+                // Account quota observations are independent of which session supplies the visible pose.
+                if kind == "state", id == "gpt", !pauseRealEvents {
+                    if text.contains("\"event\": \"Stop\"") || text.contains("\"event\":\"Stop\"") {
+                        codexBusyAt = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refreshCodexQuota(.turnEnd) }
+                    } else { codexBusyAt = stamp }
+                }
                 if kind == "state", let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let pose = state["pose"] as? String {
+                    if isPlus, !clawdPresentation.nativeIsCurrent(character: id, state: state, now: Date().timeIntervalSince1970) { continue }
                     lastPose[id] = (pose, stamp)
                     // 终端里的 AI 没有独立的前台 App：跟随最近一条正在工作的事件。
                     if id != "current", pose != "idle", pose != "sleeping",
@@ -32,8 +41,9 @@ extension App {
                     }
                 }
                 if kind == "sessions" {
-                    if !pauseRealEvents { js("setSessions(\(quote(id)), \(text))") }
-                    noteSessions(id, text)   // 多桌宠：额外那只拿她客户端的那份
+                    let merged = mergedClawdSessions(id, text)
+                    if !pauseRealEvents { js("setSessions(\(quote(id)), \(merged))") }
+                    noteSessions(id, merged)   // 多桌宠：额外那只拿她客户端的那份
                     continue
                 }
                 devJS("logEvent(\(quote(id)), \(quote(kind)), \(text), \(pauseRealEvents))")
@@ -44,13 +54,6 @@ extension App {
                     js("applyCharState(\(quote(id)), \(text))")
                     if id != "current" { noteCharState(id, text, stamp) }
                 } else { quotaJS(id, "setQuota(\(quote(id)), \(text))") }
-                // Codex 回完一轮：额度记录刚写进会话，马上读一次（不然要等每分钟一次的定时刷新）
-                if kind == "state", id == "gpt" {
-                    if text.contains("\"event\": \"Stop\"") || text.contains("\"event\":\"Stop\"") {
-                        codexBusyAt = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refreshCodexQuota(.turnEnd) }
-                    } else { codexBusyAt = stamp }   // 在干活：定时查额度改成 1 分钟一次（codexTickDue）
-                }
             }
         }
         // 同角色的新事件也必须撤销更早的异步答复，否则旧请求可能把她切回另一个角色。

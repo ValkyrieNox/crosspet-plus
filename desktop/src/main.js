@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Notification, screen, ipcMain, globalShortcut, nativeTheme, dialog, shell, nativeImage, powerSaveBlocker, powerMonitor, clipboard, safeStorage, net } = require("electron");
+if (require("./package-crosspet-smoke").maybeRunCrosspetBridgeSmoke({ app, BrowserWindow })) return;
 const crosspetLaunch = require("./crosspet-launch").resolveCrosspetLaunch({
   platform: process.platform, isPackaged: app.isPackaged, execPath: process.execPath,
   argv: process.argv, env: process.env, parentPid: process.ppid,

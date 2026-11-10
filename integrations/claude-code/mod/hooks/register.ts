@@ -164,7 +164,12 @@ async function ensurePet($: EngineInterface): Promise<void> {
     const pid = (await $.fs.read(`${await stateDir($)}/pet.pid`)).trim()
     if (/^\d+$/.test(pid) && (await $.process.run(['/bin/kill', '-0', pid])).exitCode === 0) return  // 在跑
   } catch {}
-  await $.process.run(['/usr/bin/open', '-g', '-b', 'io.github.crosspet'], { timeoutMs: 10_000 })  // -g：后台打开，不抢焦点
+  let bundleId = 'io.github.crosspet'
+  try {
+    const preferred = (await $.fs.read(`${data}/native-bundle-id`)).trim()
+    if (preferred === 'io.github.crosspet' || preferred === 'com.valkyrienox.crosspet-plus.native') bundleId = preferred
+  } catch {}
+  await $.process.run(['/usr/bin/open', '-g', '-b', bundleId], { timeoutMs: 10_000 })  // -g：后台打开，不抢焦点
 }
 
 type Limit = { kind: string; percentUsed: number; resetsAt?: string }

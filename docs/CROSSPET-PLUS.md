@@ -2,7 +2,7 @@
 
 ## 主体与数据流
 
-本版本以 CrossPet 1.3.10 的 Windows 原生应用为主体。`app/windows/` 负责透明窗口、原生菜单、设置、前台跟随、接入、额度和多桌宠窗口；`app/web/` 原版页面负责角色姿态、动画、互动、剧情和任务卡片。
+本版本以 CrossPet 1.3.10 的原生应用为主体。Windows 使用 `app/windows/`，macOS 使用 `app/mac/`；原生宿主负责透明窗口、菜单、设置、前台跟随、接入、额度和多桌宠窗口。`app/web/` 原版页面负责角色姿态、动画、互动、剧情和任务卡片。
 
 新增桥接把 Clawd 接收的会话状态交给 CrossPet 的 `setSessions`、`applyCharState` 与 `applyClientState`，复用其现有逻辑。没有将角色转换成 Clawd 皮肤。
 
@@ -29,6 +29,7 @@ CrossPet 原有角色／换装、自动跟随、单宠互动、多会话忙碌�
 新增／适配的代码：
 
 - `app/windows/src/Pet.Clawd.cs`：启动后台、读会话快照、合并原生会话、转发客户端状态、定位审批卡片、退出时停止后台。
+- `app/mac/ClawdBridge.swift` 与 `App+Clawd.swift`：Mac 后台宿主锁、实例身份核对、启动期间命令排队、会话合并、按客户端状态分发、多屏审批锚点和退出清理。
 - 原生菜单的四个入口，以及启动／轮询／退出处的少量接线。
 - `desktop/src/crosspet-service.js`：最小状态快照与本机命令收件箱，用于打开功能窗口、切换任务免打扰、调整锚点、维护已保存的连接和退出。
 - `desktop/src/crosspet-model.js`：按上报模型选择 CrossPet 角色。
@@ -73,6 +74,10 @@ Remote SSH 每条连接可独立选择自动、IPv4 或 IPv6，应用于连接�
 
 Windows 程序安装在 `%LOCALAPPDATA%\Programs\CrossPet`。CrossPet 数据在 `%LOCALAPPDATA%\CrossPet`，Clawd 设置与既有 SSH 配置仍在 `%APPDATA%\clawd-on-desk` 和 `~/.clawd`。
 
+Mac 的 `CrossPet.app` 内嵌同架构 `CrossPet Plus.app` 后台。原生资源与独立桥接目录位于 `~/Library/Application Support/CrossPet/`，原版 hook 状态仍在 `/tmp/crosspet`。Clawd 配置沿用 `~/Library/Application Support/clawd-on-desk` 和 `~/.clawd`。原版外观设置仅首次导入，已有 Plus 设置优先；不套用 Windows 安装器的配置覆盖迁移。
+
+Mac Plus 不运行上游 `get.sh` 安装器，更新只识别本 fork 对应架构的完整组合包并打开下载页。后台不单独升级；独立 Clawd 占用单实例锁时显示后台错误并等待用户重试，不强杀其他进程。
+
 安装器要求旧应用已退出，备份相关配置和自启动项，完整复制并核对文件数量、字节数和每个文件的 SHA-256，再交换安装目录。旧目录保留，已有早期 CrossPet Plus 安装也保留。迁移只把后台主题改为透明兼容主题、关闭自动审批并开启危险操作提醒；其他偏好与远程配置保留。
 
 CrossPet 原生更新器指向本仓库的完整组合包。后台不单独安装 Electron 更新。自动启动复用 CrossPet 自己的 `--ensure` 逻辑，尊重手动退出和“AI 开始工作时自动出现”开关。
@@ -81,9 +86,11 @@ CrossPet 原生更新器指向本仓库的完整组合包。后台不单独安�
 
 ## 平台与确认范围
 
-增强版目前针对 Windows 桌面，可连接本机、WSL 和 SSH 代理。Mac 原生应用源码完整保留，但尚未加入相同桥接；没有增强版 Linux GUI 包。
+增强版已接入 Windows 和 macOS 原生桌面，两端都可连接本机与 SSH 代理，Windows 另支持 WSL。Mac 本地构建默认产出本机架构，CI 配置为 arm64 / x64 分别构建；没有增强版 Linux GUI 包。
 
 构建成功与源码保留不能证明所有交互都正常。原版与后台均已成功编译；具体启动、审批和远端确认结果以实际安装记录为准，不把上游的结果算作本项目结果。多桌宠剧情、各代理的审批和各远端环境尚不能宣称全部逐项确认。
+
+Mac 的验证命令、已验证范围与尚需真实代理/远端验证的范围见 [macos-plus.md](macos-plus.md)。
 
 ## 2026-11-10 Windows 安装确认（1.3.10-plus.4）
 

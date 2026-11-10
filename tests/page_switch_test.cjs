@@ -81,7 +81,7 @@ function makePage() {
     closest() { return null }
   }
   const els = {}
-  for (const id of ['fit', 'wrap', 'bubble', 'stage', 'aura', 'shadow', 'body', 'a', 'b', 'blink', 'fx', 'cards', 'more', 'newsCard', 'newsText', 'poof', 'foot', 'caption', 'quota'])
+  for (const id of ['fit', 'wrap', 'bubble', 'stage', 'aura', 'shadow', 'body', 'a', 'b', 'blink', 'fx', 'cards', 'more', 'collaboration', 'newsCard', 'newsText', 'poof', 'foot', 'caption', 'quota'])
     els[id] = new El(['a', 'b', 'blink'].includes(id) ? 'img' : 'div', id)
   els.a.classList.add('on'); els.bubble.classList.add('hide'); els.newsCard.classList.add('hidden')
   els.cards.appendChild(els.more)
@@ -111,7 +111,7 @@ function makePage() {
   ctx.globalThis = ctx
   vm.createContext(ctx)
   vm.runInContext('Math.random = () => 0.99', ctx)   // 不随机出闲时小动作、彩蛋
-  for (const f of ['effects.js', 'text-size.js', 'codex-quota.js', 'quota-aggregate.js', 'plugin-update.js', 'stand-in.js', 'follow-policy.js', 'codex-resets.js', 'peak-hours.js', 'whats-new.js', 'companions.js', 'friendship.js', 'pair-chat.js'])
+  for (const f of ['effects.js', 'text-size.js', 'codex-quota.js', 'quota-aggregate.js', 'plugin-update.js', 'stand-in.js', 'follow-policy.js', 'codex-resets.js', 'peak-hours.js', 'whats-new.js', 'companions.js', 'collaboration.js', 'friendship.js', 'pair-chat.js'])
     vm.runInContext(fs.readFileSync(path.join(WEB, f), 'utf8'), ctx, { filename: f })
   const html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/\r\n/g, '\n')
   const start = html.lastIndexOf('<script>\n'), end = html.lastIndexOf('</script>')
@@ -163,6 +163,18 @@ async function fresh() {
 function assert(c, msg) { if (!c) throw Error(msg) }
 
 const cases = [
+  ['plus_backend_loss_restores_idle_and_native_legacy_routing', async e => {
+    await multiOn(e, 'gpt')
+    e.run(`setSessions('gpt', csess(['plus','asking','codex'])); applyClientState('gpt','codex',{character:'gpt',client:'codex',key:'plus',pose:'asking',ts:Date.now()/1000,_crosspetPlus:'instance-a'})`)
+    await e.advance(3000)
+    e.run(`clearClawdState('gpt','codex','instance-a',false); setSessions('gpt',{})`)
+    await e.advance(3000)
+    assert(e.state().pose !== 'asking', 'lost backend left an indefinite asking pose')
+    assert(!e.run('clientStateSeen.gpt'), 'lost backend left by-client routing enabled')
+    e.run(`hook('gpt','reading','PreToolUse')`)
+    await e.advance(3000)
+    assert(e.state().pose === 'reading', `legacy native hook suppressed after disconnect: ${e.state().pose}`)
+  }],
   ['render_recovery_says_why_she_vanished', async e => {
     e.run(`justRecovered()`)
     await e.advance(3000)
@@ -1137,7 +1149,7 @@ const multiCases = [
       `companionCall: ${JSON.stringify(multiMsgs(e))}`)
   }],
 ]
-const multiNames = new Set(multiCases.map(c => c[0]))
+const multiNames = new Set([...multiCases.map(c => c[0]), 'plus_backend_loss_restores_idle_and_native_legacy_routing'])
 cases.push(...multiCases)
 
 ;(async () => {
