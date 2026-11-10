@@ -1,24 +1,23 @@
 # CrossPet Plus attribution
 
-The desktop runtime is derived from **rullerzhou-afk/clawd-on-desk** at
-`300d9bf8abaa2ec7559e84935a1968c67f71ef83`, licensed AGPL-3.0-only. Its
-`LICENSE`, `NOTICE.md`, source attribution and operational documentation are
-retained. Changes add a presentation adapter, fork packaging and CrossPet
-defaults. The hook, approval and remote-transport protocols are preserved.
+CrossPet Plus uses the original **lokicorvus/crosspet** native Windows host,
+shared web frontend and original character resources, pinned at
+`8954eb8f7f69fcfb8d35e9deceeb78e10c804402`. Its original source is MIT licensed.
+Character artwork has separate CC BY-NC-SA 4.0 terms and individual credits
+in `characters/LICENSE.md`. This is an unofficial, non-commercial fan project.
 
-Character designs and pose images come from **lokicorvus/crosspet** at
-`8954eb8f7f69fcfb8d35e9deceeb78e10c804402`. Its original source code remains
-MIT licensed. Character art and derivatives have separate CC BY-NC-SA 4.0
-terms; see the repository's `characters/LICENSE.md` and individual character
-credits. The application is an unofficial fan project.
+The optional task, approval and remote service in `desktop/` derives from
+**rullerzhou-afk/clawd-on-desk**, pinned at
+`300d9bf8abaa2ec7559e84935a1968c67f71ef83`, licensed AGPL-3.0-only. Its license,
+notices and source attribution are retained. New bridge, service mode,
+packaging and migration code is AGPL-3.0-only. Existing approval and remote
+transport protocols remain in their original modules.
 
-The Clawd project's restricted character artwork, application icons and
-accessory art are **not redistributed** here. The preparation script creates
-replacement interface icons, simple accessory shapes and synthesized sounds.
-Generated animation wrappers combine original integration code with CrossPet
-images; distributing the resulting artwork must also respect CrossPet's art
-license. The AGPL code license does not relicense third-party artwork.
+Clawd's pet/input compatibility windows are invisible; CrossPet's native app
+renders the actual pet. The Clawd project's restricted pixel character and
+accessory artwork is not distributed. Preparation generates a transparent
+compatibility theme, replacement interface icons and synthesized sounds.
+The code license does not relicense artwork.
 
-Dependencies retain their own licenses in their packages. See `NOTICE.md`
-for the upstream third-party notices; not every asset mentioned there is
-included in this derived distribution.
+Dependencies retain their individual licenses. Upstream `NOTICE.md` is kept
+for provenance; some artwork mentioned there is absent from this derivative.

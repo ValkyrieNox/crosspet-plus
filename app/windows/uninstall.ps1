@@ -29,10 +29,7 @@ try {
         }
         # 只关掉这个位置的 CrossPet，等它释放文件
         $processes = @(Get-Process CrossPet -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe })
-        foreach ($process in $processes) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
-        if ($processes.Count -gt 0) {
-            Wait-Process -Id $processes.Id -Timeout 10 -ErrorAction SilentlyContinue
-        }
+        if ($processes.Count -gt 0) { throw '请先从托盘退出 CrossPet，再卸载；不会强制结束正在运行的程序。' }
         $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
         if (Test-Path $run) {
             $key = Get-Item $run

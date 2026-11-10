@@ -3,6 +3,9 @@ const { app, BrowserWindow, Notification, screen, ipcMain, globalShortcut, nativ
 // replaces that runtime rather than competing for ~/.clawd hook ingress.
 app.setPath("userData", require("path").join(app.getPath("appData"), "clawd-on-desk"));
 app.setName("CrossPet Plus");
+const crosspetServiceMode = process.argv.includes("--crosspet-service");
+const { startCrosspetService, backgroundPetWindowFactory } = require("./crosspet-service");
+let crosspetService = null;
 const { maybeRunPackageKoffiSmoke } = require("./package-koffi-smoke");
 if (maybeRunPackageKoffiSmoke({ app, BrowserWindow })) {
   return;
@@ -429,6 +432,7 @@ async function _uninstallClaudeHooksNow() {
 // and the startup hydration helper. Throws on failure so the action layer can
 // surface the error to the UI.
 function _writeSystemOpenAtLogin(enabled) {
+  if (crosspetServiceMode) return; // CrossPet's original host owns login startup.
   if (isLinux) {
     const launchScript = path.join(__dirname, "..", "launch.js");
     const execCmd = app.isPackaged
@@ -1640,8 +1644,6 @@ function requestDisplayedVisual(displayState, file, options = {}) {
   const activeTheme = getActiveTheme();
   // Resolve before generation/ACK ownership so hitboxes, reactions, mini mode
   // and displayed-visual consumers all agree on the actual CrossPet asset.
-  file = require("./crosspet-visual").resolveCrosspetVisual(activeTheme,
-    _state.getPetPresentationSessions(), displayState, file);
   // Re-sampled on every idle request, so a drag or roam since the last idle
   // animation is picked up before the next one starts.
   if (displayState === "idle") syncPetScreenSide();
@@ -5206,6 +5208,19 @@ const _updaterCtx = {
   },
 };
 const _updater = require("./updater")(_updaterCtx);
+if (crosspetServiceMode) {
+  // The native CrossPet updater installs the complete bundle. An Electron-only
+  // update would detach the backend from its matching native host.
+  _updater.checkForUpdates = () => shell.openExternal("https://github.com/ValkyrieNox/crosspet-plus/releases");
+  _updater.getUpdateMenuItem = () => ({
+    label: "CrossPet 完整版更新…",
+    click: () => _updater.checkForUpdates(),
+  });
+  _updater.onSilentModeExit = () => {};
+  _updater.startUpdateScheduler = () => {};
+  _updater.setupAutoUpdater = () => {};
+  _updater.reconcilePendingOnStartup = () => {};
+}
 const {
   setupAutoUpdater,
   checkForUpdates,
@@ -5536,7 +5551,7 @@ function createWindow() {
 
   const initialAccessoryDelivery = prepareCurrentAccessorySlotsDelivery();
   petWindowRuntime.createRenderWindow({
-    BrowserWindow,
+    BrowserWindow: crosspetServiceMode ? backgroundPetWindowFactory(BrowserWindow) : BrowserWindow,
     size,
     initialWindowBounds,
     initialVirtualBounds,
@@ -5557,7 +5572,7 @@ function createWindow() {
 
   // ── Create input window (hitWin) — small rect over hitbox, receives all pointer events ──
   hitWin = petWindowRuntime.createHitWindow({
-    BrowserWindow,
+    BrowserWindow: crosspetServiceMode ? backgroundPetWindowFactory(BrowserWindow) : BrowserWindow,
     preloadPath: path.join(__dirname, "preload-hit.js"),
     loadFilePath: path.join(__dirname, "hit.html"),
     hitThemeConfig: themeRuntime.getHitRendererConfig(),
@@ -6317,6 +6332,29 @@ if (!gotTheLock) {
     catch (err) { console.warn("Clawd: discord presence startup failed:", err && err.message); }
     queueFeishuApprovalSync("startup");
     createWindow();
+    if (crosspetServiceMode) {
+      crosspetService = startCrosspetService({
+        getSessions: () => _state.getCrosspetPresentationSessions(),
+        getPendingPermissions: () => pendingPermissions,
+        openDashboard: () => showDashboard(),
+        openSettings: (tab) => settingsWindowRuntime.open({ tab }),
+        showApprovals: () => {
+          for (const entry of pendingPermissions) {
+            if (entry.bubble && !entry.bubble.isDestroyed()) entry.bubble.show();
+          }
+          if (!pendingPermissions.length) showDashboard();
+        },
+        setAnchor: (bounds) => {
+          if (![bounds.x,bounds.y,bounds.width,bounds.height].every(Number.isFinite)
+            || bounds.width < 1 || bounds.height < 1 || bounds.width > 10000 || bounds.height > 10000) return;
+          const dip = isWin ? screen.screenToDipRect(null,bounds) : bounds;
+          applyPetWindowPosition(Math.round(dip.x),Math.round(dip.y));
+          repositionBubbles();
+        },
+        quit: () => app.quit(),
+        log: (message) => console.warn(message),
+      });
+    }
     try { recapRuntime.start(); }
     catch (err) { console.warn("Clawd: local recap startup failed:", err && err.code ? err.code : "storage-error"); }
     // nativeTheme reads are only used to pick an appearance, so subscribing
@@ -6429,13 +6467,13 @@ if (!gotTheLock) {
     }
 
     // Auto-updater: setup event handlers (user triggers check via tray menu)
-    setupAutoUpdater();
+    if (!crosspetServiceMode) setupAutoUpdater();
     // #329: reconcile any stale pending-update entry (e.g. user installed
     // out-of-band on macOS) and start the background scheduler. Both are
     // safe in dev mode — reconcile is a no-op when nothing is pending,
     // and startUpdateScheduler() short-circuits on !app.isPackaged.
-    try { reconcilePendingOnStartup(); } catch (err) { updateLog(`reconcile failed: ${err && err.message}`); }
-    try { startUpdateScheduler(); } catch (err) { updateLog(`scheduler start failed: ${err && err.message}`); }
+    try { if (!crosspetServiceMode) reconcilePendingOnStartup(); } catch (err) { updateLog(`reconcile failed: ${err && err.message}`); }
+    try { if (!crosspetServiceMode) startUpdateScheduler(); } catch (err) { updateLog(`scheduler start failed: ${err && err.message}`); }
 
     // Deferred so any startup Codex hook sync has settled before we read the
     // on-disk hook state; unref'd so it never blocks a fast quit.
@@ -6444,6 +6482,7 @@ if (!gotTheLock) {
   });
 
   app.on("before-quit", (event) => {
+    if (crosspetService) { crosspetService.stop(); crosspetService = null; }
     quotaNotificationIpc.dispose();
     isQuitting = true;
     if (!appQuitDrainReady) {

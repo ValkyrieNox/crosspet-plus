@@ -1,18 +1,18 @@
 {
   "name": "crosspet-plus-workspace",
-  "version": "1.6.0-plus.1",
+  "version": "1.3.10-plus.2",
   "private": true,
-  "description": "CrossPet characters with the complete Clawd on Desk runtime",
+  "description": "Original CrossPet desktop app with a Clawd task, approval and remote service",
   "license": "AGPL-3.0-only",
   "scripts": {
     "postinstall": "node scripts/prepare-desktop.cjs && npm --prefix desktop ci",
     "prepare:desktop": "node scripts/prepare-desktop.cjs",
     "setup": "npm run prepare:desktop && npm --prefix desktop ci",
-    "start": "npm run prepare:desktop && npm --prefix desktop start",
-    "build:win": "npm run prepare:desktop && npm --prefix desktop run build:win:x64",
-    "build:win:dir": "npm run prepare:desktop && npm --prefix desktop run build:win:dir",
-    "build:mac": "npm run prepare:desktop && npm --prefix desktop run build:mac",
-    "build:linux": "npm run prepare:desktop && npm --prefix desktop run build:linux"
+    "start": "node scripts/start-native.cjs",
+    "build:win": "node scripts/build-windows.cjs",
+    "build:win:dir": "node scripts/build-windows.cjs --dir",
+    "build:service:win": "npm run prepare:desktop && npm --prefix desktop run build:win:dir",
+    "build:mac:upstream": "bash app/build.sh"
   },
   "engines": { "node": ">=22.12.0" }
 }

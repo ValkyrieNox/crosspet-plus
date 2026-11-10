@@ -1,51 +1,62 @@
-# CrossPet Plus 的功能与边界
+# CrossPet Plus 的组成与边界
 
-## 组成
+## 主体与数据流
 
-- 根目录保留 CrossPet 原始代码、角色、服装和许可证。
-- `desktop/` 引入固定版本的 Clawd 完整功能代码。不是重新实现一套审批或 SSH 协议。
-- `scripts/prepare-desktop.cjs` 将 CrossPet 角色图编译为 Clawd 主题，生成自主绘制的界面资源。
-- `desktop/src/crosspet-visual.js` 只决定显示哪一个角色，不参与任何权限决定。
+本版本以 CrossPet 1.3.10 的 Windows 原生应用为主体。`app/windows/` 负责透明窗口、原生菜单、设置、前台跟随、接入、额度和多桌宠窗口；`app/web/` 原版页面负责角色姿态、动画、互动、剧情和任务卡片。
 
-## 功能对应
+新增桥接把 Clawd 接收的会话状态交给 CrossPet 的 `setSessions`、`applyCharState` 与 `applyClientState`，复用其现有逻辑。没有将角色转换成 Clawd 皮肤。
 
-| 能力 | 保留的实现 | CrossPet 显示 |
-|---|---|---|
-| 审批队列、批准／拒绝、问题选择、计划审阅 | permission、server-route-permission、bubble、permission-queue | 等待确认姿态，原审批卡片 |
-| 一个／两个／三个以上并行任务 | state、state-visual-resolver 的 workingTiers | 工作／左右忙碌／手忙脚乱，1／2／3+ 标记 |
-| 多个子代理协作 | subagent-lifecycle、jugglingTiers | 协作分档动作 |
-| 点击、双击、拖动、连续点击反馈 | pet-interaction-ipc、hit-renderer、renderer | 摸头、开心、惊讶、不满等原角色姿态 |
-| 完成、失败、等待输入 | 原状态优先级和提示生命周期 | 完成、出错、等待姿态与提示音 |
-| 会话面板、HUD、终端跳转、快捷键 | dashboard、session-hud、session-focus | 原功能界面 |
-| 本机、WSL | 原集成安装器、WSL Scan / Pair | 同一套 CrossPet 形象 |
-| SSH 远程、重连、部署／修复、远端状态 | remote-ssh-*、原 remote hooks | 同一套 CrossPet 形象 |
-| 额度、上下文、通知、免打扰、漫游、边缘模式 | Clawd 原模块 | CrossPet 主题和原功能界面 |
-| Telegram／飞书审批、Slack、手机只读页面、本地小结 | Clawd 原模块 | 保留为可选功能，不自动绑定账号或发送消息 |
+```text
+CrossPet 原生程序 ── 原版网页／角色／互动／多桌宠
+       │
+       ├── 原生 CrossPet hooks 和原版接入工具
+       │
+       └── Clawd 后台服务 ── 本机／WSL／SSH 代理
+                 ├── 会话状态 → CrossPet 原版任务动作和卡片
+                 └── 原审批卡片／任务面板／接入与远程设置窗口
+```
 
-“与 Clawd 相同”也包括它的限制：某个工具／环境只能提醒或回退原生审批时，本项目不会伪造一个可批准按钮。
-Codex Auto 模式对远端、WSL 等来源的审批接管限制继续保留；需要按原界面明确选择 Intercept 时由用户选择。
-远程配置只通过设置页管理，不绕过源项目的身份、隧道和部署锁。
+Clawd 保留两个不可见兼容窗口，用于其内部状态及渲染确认生命周期。新增代码只永久隐藏这两个窗口，审批卡片、Dashboard、设置和其他功能窗口仍使用原窗口类型。
 
-## 外观
+## 原版功能与新增内容
 
-默认“CrossPet · 随模型切换”按获准进入运行时的可见会话模型选择 Claude、GPT、DeepSeek、Gemini、GLM、Qwen 或 Grok。
-识别失败保留上一个角色；中转服务隐藏真实模型时不推测其后端。工作环境本机／WSL／SSH不改变此规则。
-在设置的主题页选具体 CrossPet 角色或服装可固定外观。
+CrossPet 原有角色／换装、自动跟随、单宠互动、多会话忙碌动作、多桌宠集合和友谊访客逻辑继续使用原实现。原生设置、接入脚本、额度读取、反馈和开发者工具也保留。
 
-动画是 CrossPet 姿态图片与程序动画组合，不是 Live2D。并行任务和子代理数量是两种不同统计，各自使用原 Clawd 的计数口径。
-原 CrossPet 的多桌宠友谊／访客剧情没有移植进 Clawd 的单宠主题接口；原应用代码仍保留在根目录。
-Clawd 的像素角色和原配饰美术不分发，功能接口保留，配饰使用程序生成的简单替代图。
+新增／适配的代码：
 
-## 配置与升级
+- `app/windows/src/Pet.Clawd.cs`：启动后台、读会话快照、合并原生会话、转发客户端状态、定位审批卡片、退出时停止后台。
+- 原生菜单的四个入口，以及启动／轮询／退出处的少量接线。
+- `desktop/src/crosspet-service.js`：最小状态快照与本机命令收件箱，只允许打开功能窗口、调整锚点和退出。
+- `desktop/src/crosspet-model.js`：按上报模型选择 CrossPet 角色。
+- Clawd 的服务模式、隐藏兼容窗口、原生启动和组合更新适配。
+- 完整构建、校验安装、配置备份与迁移、文档和 CI。
 
-Windows 增强版沿用 `%APPDATA%\clawd-on-desk` 和 `~/.clawd`，方便保留既有接入与 SSH 配置，也沿用单实例锁。
-必须退出原 Clawd 后再运行增强版；不要同时运行原 CrossPet 的接入脚本和增强版审批内核。
-新装默认关闭自动审批、开启危险命令提醒；已有配置的切换应先备份，再通过设置更改。
+审批协议、权限策略、SSH 身份与部署协议、代理集成和功能窗口来自 Clawd，不是本项目重新实现。新增收件箱没有 allow／deny 操作，不提供绕过审批的入口。
 
-更新源指向 `ValkyrieNox/crosspet-plus`，不使用上游 Clawd 安装包覆盖本项目。上游源码提交记录于 `UPSTREAMS.json`。
-所有运行期账号、SSH 配置、聊天、PAT、运行日志和备份留在仓库外。
+本机同一会话被两套 hook 观察时按原始会话 ID 合并；WSL／SSH 会话按 Clawd 的来源身份区分。快照不包含提示词、对话、工具参数、工作路径和凭据。
 
-## 验证记录
+## 显示与配置边界
 
-本文件描述代码组成和能力来源，不表示每台实际设备或每种远端配置均已验证。
-构建产物、运行状态和本机部署记录另存本地，不把上游测试记录当成本项目测试结果。
+CrossPet 负责实际桌宠的形象、互动、窗口与动作。Clawd 的主题、配饰、大小、漫游／mini 等纯桌宠外观设置不会改变 CrossPet；对应能力使用 CrossPet 自己的界面和实现。Clawd 的会话与审批功能保留自己的设置窗口。
+
+同一客户端的一／二／三任务复用 CrossPet 的普通／busy／swamped 动作。子代理状态投影使用 Clawd 既有仲裁，再交给 CrossPet 的协作姿态；不把子代理数量冒充独立会话数。
+
+权限审批覆盖范围和原生回退继续遵循 Clawd 的 capabilities 和来源规则，不能承诺每个代理、远端和桌面应用都能由桌宠批准。WSL／远端 Codex 在 Auto 模式的限制仍保留；需要 Intercept 时由用户在原设置界面显式选择。
+
+直接调用任意 API 或网页聊天没有提供 hook／状态事件时无法自动感知。实际模型没有上报时不猜测中转服务的后端。
+
+## 安装、升级与回退
+
+Windows 程序安装在 `%LOCALAPPDATA%\Programs\CrossPet`。CrossPet 数据在 `%LOCALAPPDATA%\CrossPet`，Clawd 设置与既有 SSH 配置仍在 `%APPDATA%\clawd-on-desk` 和 `~/.clawd`。
+
+安装器要求旧应用已退出，备份相关配置和自启动项，完整复制并核对文件数量、字节数和每个文件的 SHA-256，再交换安装目录。旧目录保留，已有早期 CrossPet Plus 安装也保留。迁移只把后台主题改为透明兼容主题、关闭自动审批并开启危险操作提醒；其他偏好与远程配置保留。
+
+CrossPet 原生更新器指向本仓库的完整组合包。后台不单独安装 Electron 更新。自动启动复用 CrossPet 自己的 `--ensure` 逻辑，尊重手动退出和“AI 开始工作时自动出现”开关。
+
+账号、PAT、SSH 配置、运行状态和备份均不提交仓库。DSH 的鲸鲸独立运行。
+
+## 平台与确认范围
+
+增强版目前针对 Windows 桌面，可连接本机、WSL 和 SSH 代理。Mac 原生应用源码完整保留，但尚未加入相同桥接；没有增强版 Linux GUI 包。
+
+构建成功与源码保留不能证明所有交互都正常。原版与后台均已成功编译；具体启动、审批和远端确认结果以实际安装记录为准，不把上游的结果算作本项目结果。多桌宠剧情、各代理的审批和各远端环境尚不能宣称全部逐项确认。

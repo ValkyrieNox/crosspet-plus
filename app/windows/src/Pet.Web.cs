@@ -89,6 +89,7 @@ namespace CrossPet
                     var value = Store.ReadJson(file);
                     if (value == null) continue;   // 可能正被另一边写一半，下次再读
                     stamps[key] = stamp;
+                    if (kind == "sessions") value = MergeClawdSessions(id, value);
                     var json = Store.Json.Serialize(value);
                     if (kind == "sessions")
                     {
@@ -118,6 +119,7 @@ namespace CrossPet
                     else QuotaJS(id, $"setQuota({Q(id)}, {json})");   // 额外那只是这个角色、显示额度：也拿一份
                 }
             if (latestActive.id != null) _ = FollowEvent(latestActive.id);
+            PollClawdService();
             PollClientStates();   // 多桌宠：按客户端的状态（开关关着、没在集合时直接返回，不读 @ 文件）
             ApplyLayer();
             UpdateDock();

@@ -26,7 +26,7 @@ namespace CrossPet
     /// </summary>
     sealed partial class Pet
     {
-        const string Repo = "lokicorvus/crosspet";
+        const string Repo = "ValkyrieNox/crosspet-plus";
         CoreWebView2Environment env;   // 浏览器进程崩溃后要换一个新的（见 RecoverWeb）
         public DirectHost Host { get; private set; }
         WebView2 web;
@@ -65,6 +65,7 @@ namespace CrossPet
         public void Start()
         {
             Store.SyncResources();
+            EnsureClawdService();
             current = Store.Settings.TryGetValue("character", out var c) && c is string s ? s : "claude";
 
             Host = new DirectHost(true) { Topmost = LayerMode != "normal" };
@@ -190,6 +191,7 @@ namespace CrossPet
                     if (RenderRecovery.Ready()) Js("justRecovered()");   // 渲染出错重启回来：她自己说一声（托盘通知在 Windows 11 上常被收进通知中心）
                     ApplySizes(anchor: Anchor.Corner);   // 解锁过文字大小的：按画布重设窗口，左上角不动（锁着的尺寸不变）
                     stamps.Clear();
+                    clawdRevision = null;
                     Poll();
                     RefreshQuota();
                     RefreshCodexQuota(CodexWhy.Now);

@@ -851,9 +851,7 @@ function hasOwnVisualFiles(state) {
 
 function resolveVisualBinding(state) {
   if (state === "executing") return getSvgOverride(state);
-  return require("./crosspet-visual").resolveCrosspetVisual(theme,
-    getPetPresentationSessions(projectPendingAttention()), state,
-    resolveVisualBindingWithBindings(state, STATE_BINDINGS));
+  return resolveVisualBindingWithBindings(state, STATE_BINDINGS);
 }
 
 // Display re-selection only. Default getReminderReselectionOptions(resolved) keeps existing Kiro/Copilot waits quiet.
@@ -4299,6 +4297,12 @@ function getPetPresentationSessions(source = sessions) {
   return projected;
 }
 
+// Native CrossPet consumes the same child/wait projection as Clawd's pet,
+// while canonical sessions and permission decisions remain owned here.
+function getCrosspetPresentationSessions() {
+  return getPetPresentationSessions(projectPendingAttention());
+}
+
 function isPassivePetPresentation() {
   return SLEEP_SEQUENCE.has(currentState)
     || ["mini-idle", "mini-sleep", "mini-peek", "mini-peek-hold", "mini-sleep-peek"].includes(currentState);
@@ -4349,8 +4353,7 @@ function getSvgOverride(state) {
     stateSvgs: STATE_SVGS,
     pickVisualFile: stableVisualPicker.pick,
   });
-  return require("./crosspet-visual").resolveCrosspetVisual(theme,
-    getPetPresentationSessions(projectPendingAttention()), state, file);
+  return file;
 }
 
 // ── Session Dashboard ──
@@ -4504,7 +4507,7 @@ return {
   // Read-only, unmerged account windows for source-specific alert deduplication.
   getAccountQuotaSnapshot: () => accountQuota.snapshot({ mergeSources: false }),
   startStaleCleanup, stopStaleCleanup, startWakePoll, stopWakePoll,
-  getSvgOverride, getPetPresentationSessions, refreshPetPresentation, cleanStaleSessions, startStartupRecovery, refreshTheme,
+  getSvgOverride, getPetPresentationSessions, getCrosspetPresentationSessions, refreshPetPresentation, cleanStaleSessions, startStartupRecovery, refreshTheme,
   detectRunningAgentProcesses, buildSessionSnapshot,
   emitSessionSnapshot, broadcastSessionSnapshot, getLastSessionSnapshot,
   getActiveSessionAliasKeys,

@@ -89,7 +89,7 @@ namespace CrossPet
         async Task SelfUpdate()
         {
             if (updating || !(latestRelease is var (tag, page)) || updateZip == null) return;
-            if (MessageBox.Show($"更新到 {tag}？\n\n会自动下载（约 20 MB）、安装并重新打开，设置、角色和 AI 接入都保留。",
+            if (MessageBox.Show($"更新到 {tag}？\n\n会自动下载完整增强包、安装并重新打开，设置、角色和 AI 接入都保留。",
                     "CrossPet 更新", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
             updating = true;
             try

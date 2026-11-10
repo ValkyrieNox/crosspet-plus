@@ -1,23 +1,13 @@
-name: Build CrossPet Plus
+name: Build native CrossPet Plus for Windows
 on:
   workflow_dispatch:
   push:
-    tags: ['plus-v*']
+    tags: ['v*-plus.*']
 permissions:
   contents: read
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            build: build:win
-          - os: macos-latest
-            build: build:mac
-          - os: ubuntu-latest
-            build: build:linux
-    runs-on: ${{ matrix.os }}
+  windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,15 +15,16 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - run: npm run setup
-      - run: npm run ${{ matrix.build }}
+      - run: npm run build:win
       - uses: actions/upload-artifact@v4
         with:
-          name: CrossPet-Plus-${{ runner.os }}
-          path: |
-            desktop/dist/*.exe
-            desktop/dist/*.dmg
-            desktop/dist/*.zip
-            desktop/dist/*.AppImage
-            desktop/dist/*.deb
+          name: CrossPet-Plus-Windows-native
+          path: build/CrossPet-Windows.zip
           if-no-files-found: error

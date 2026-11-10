@@ -8,6 +8,7 @@ desktop/.env.*
 *.log
 .DS_Store
 local-deployment/
+.tools/
 /build/
 **/raw/
 *.bak-crosspet-*

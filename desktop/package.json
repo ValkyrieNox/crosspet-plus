@@ -1,7 +1,7 @@
 {
   "name": "crosspet-plus",
-  "version": "1.6.0-plus.1",
-  "description": "CrossPet characters with the complete Clawd on Desk runtime",
+  "version": "1.6.0-plus.2",
+  "description": "Clawd task and approval service for the original CrossPet desktop app",
   "main": "src/main.js",
   "scripts": {
     "start": "node launch.js",

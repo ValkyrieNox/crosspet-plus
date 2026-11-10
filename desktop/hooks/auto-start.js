@@ -217,11 +217,23 @@ function launchApp(options = {}) {
         // __dirname: <install>/resources/app.asar.unpacked/hooks
         // exe:       <install>/CrossPet Plus.exe
         const installDir = path.resolve(hooksDir, "..", "..", "..");
-        const exe = path.join(installDir, "CrossPet Plus.exe");
+        const crosspetHost = path.resolve(installDir, "..", "CrossPet.exe");
+        const hasHost = require("fs").existsSync(crosspetHost);
+        if (hasHost) {
+          // Reuse CrossPet's own launcher so manual quit / AI auto-start off
+          // retain their original meaning, including parent-process age checks.
+          const hostDir = path.dirname(crosspetHost);
+          const python = path.join(hostDir,"python","python.exe");
+          const hook = path.join(hostDir,"integrations","crosspet-hook.py");
+          spawnDetached(spawnProcess,python,[hook,"--ensure"],
+            {detached:true,stdio:"ignore"},onSpawnError);
+          return;
+        }
+        const exe = hasHost ? crosspetHost : path.join(installDir, "CrossPet Plus.exe");
         spawnDetached(
           spawnProcess,
           exe,
-          [],
+          hasHost ? [] : ["--crosspet-service"],
           { detached: true, stdio: "ignore" },
           onSpawnError
         );

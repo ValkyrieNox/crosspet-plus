@@ -440,7 +440,7 @@ const SCHEMA = {
     normalize: normalizeShortcuts,
   },
   // Theme
-  theme: { type: "string", default: "crosspet-auto" },
+  theme: { type: "string", default: "clawd" },
   // Per-theme color filter choice, e.g. { clawd: "matcha", cloudling: "mono" }.
   // Missing entries preserve the theme's native colors. The normalizer also
   // accepts the short-lived pre-detail-view string shape and seeds supported

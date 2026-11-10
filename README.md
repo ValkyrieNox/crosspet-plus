@@ -1,60 +1,62 @@
 # CrossPet Plus
 
-**CrossPet 的 AI 娘形象，配上 Clawd on Desk 的开发任务、审批和远程连接内核。**
+**以 CrossPet 原生桌宠为主体，增加 Clawd 的开发任务、审批与 WSL／SSH 连接。**
 
-本项目是个人使用的非官方衍生版。根目录保留 [CrossPet](https://github.com/lokicorvus/crosspet) 原始代码和角色；`desktop/` 引入 [Clawd on Desk](https://github.com/rullerzhou-afk/clawd-on-desk) 1.6.0 的完整功能源码，再加入 CrossPet 外观适配。固定上游提交见 [UPSTREAMS.json](UPSTREAMS.json)。
+这是个人使用的非官方衍生版。Windows 主程序仍然是 CrossPet 的 WPF + WebView2 应用，直接使用原版 `app/web/` 页面、角色和互动逻辑；`desktop/` 中的 Clawd 作为随程序启动的后台服务。不是把 CrossPet 的图片放进 Clawd 桌宠。
 
 ![CrossPet 角色](docs/images/characters.webp)
 
-## 增强版提供什么
+## 功能来源
 
-- 审批卡片、批准／拒绝、问题选择和计划审阅；默认关闭自动审批，开启危险操作提醒。
-- 一个、两个、三个以上并行任务的不同姿态与数量标记；子代理协作独立分档。
-- 点击、双击、拖动、完成提示音、出错和等待反馈，以及睡眠、漫游、贴边模式。
-- 原 Clawd 的会话面板、HUD、终端跳转、快捷键、额度和上下文展示。
-- 原 Clawd 的本机集成、WSL 配对、SSH 身份管理、部署、连接和重连。
-- 13 套 CrossPet 角色／服装；默认按会话上报的模型切换 Claude、GPT、DeepSeek、Gemini、GLM、Qwen、Grok。
+| 功能 | 使用的实现 |
+|---|---|
+| 角色／换装、点击反馈、拖动、贴边、自动跟随前台与模型 | CrossPet 原生程序和原版网页 |
+| 多桌宠、集合／解散、友谊、访客、时段／节日行为、角色台词 | CrossPet 原版逻辑 |
+| 同一客户端一／二／三任务状态、动作、完成／错误卡片 | CrossPet 原版多会话逻辑；新增 Clawd 会话来源 |
+| 原生设置、接入工具、额度、反馈与开发者工具 | CrossPet 原版实现 |
+| 审批卡片、问题／计划审阅、任务面板、终端跳转与通知 | 复用 Clawd 的完整后台与功能窗口 |
+| 本机集成、WSL 配对、SSH 部署／连接／重连 | 复用 Clawd 接入与远程实现 |
 
-保留全部内核代码，不等于每个代理和环境都有相同权限接口：审批能力和原生回退继续遵循 Clawd 原规则。网页聊天或任意 API 调用不会自动产生任务事件。中转服务没有上报实际模型时也无法可靠判断后端模型。
+默认关闭自动审批，开启危险操作提醒。某个代理或环境只能通知或回退到原生审批时，继续遵循 Clawd 的限制。普通网页聊天或没有上报状态的 API 调用不会自动被监控。
 
-增强版使用 Clawd 的单宠主题接口；原 CrossPet 的多宠友谊／访客剧情仍在原应用中，尚未移植。动画由 CrossPet 姿态图和程序动画组成，不是 Live2D。[详细功能和边界](docs/CROSSPET-PLUS.md)。
+Clawd 的隐藏兼容渲染窗口只供其内部状态生命周期使用；实际角色、动画和鼠标交互由 CrossPet 渲染。其纯外观设置不控制 CrossPet 的形象、位置、大小和漫游。更多说明与尚未确认的范围见 [功能和边界](docs/CROSSPET-PLUS.md)。
 
-## 从源码启动
+## 使用
 
-要求 Node.js 22.12+，在要显示桌宠的系统中运行：
+运行 **CrossPet.exe**。右键菜单保留原版功能，并增加：
+
+- 任务与会话面板
+- 审批与等待
+- 开发工具接入
+- WSL / SSH 远程连接
+
+原版 **设置** 管 CrossPet 外观和互动；新增菜单打开 Clawd 功能窗口。不要同时运行独立的 Clawd 或早期使用 Clawd 外壳的 CrossPet Plus。
+
+Windows 桌宠连接本机、WSL 和 SSH 上的代理；远端无需运行 GUI。模型切换依赖代理实际提供的模型标签，中转隐藏模型时不能推测后端。
+
+DSH 里的“鲸鲸”人格、记忆、QQ 和 B 站配置独立于本项目。
+
+## 构建与启动
+
+要求 Node.js 22.12+、.NET 8 SDK、Python 3、Windows WebView2 Runtime。构建脚本可在 Windows 或 WSL 运行。
 
 ```sh
 npm run setup
-npm start
+npm run build:win:dir   # 原生 CrossPet + Clawd 后台完整目录
+npm run build:win       # 同时生成完整 zip
 ```
 
-Windows 桌面建议直接运行 Windows 构建。WSL 中的代理由 Windows 桌宠的设置页进行 Scan / Pair；SSH 主机通过设置页连接和部署。不要在每台服务器上启动一个 GUI。
+产物为 `build/windows/CrossPet/` 与 `build/CrossPet-Windows.zip`。嵌入式 Python 固定版本并核对 SHA-256。解压后运行 `install.cmd`；从源码安装也可在 PowerShell 运行 `scripts/install-windows.ps1 -Start`。安装前从托盘退出旧版，安装器不会强杀进程，会备份配置并逐文件核对复制结果，保留旧安装用于回退。
 
-```sh
-npm run build:win       # Windows x64 安装包
-npm run build:win:dir   # Windows x64 解包程序
-npm run build:mac
-npm run build:linux
-```
+`npm start` 在 Windows／WSL 打开 Windows 原生 CrossPet。`DOTNET` 可指定 .NET SDK 可执行文件。
 
-产物位于 `desktop/dist/`。跨系统打包可能需要对应平台工具。GitHub Actions 的 **Build CrossPet Plus** 支持手动构建三个桌面平台。
+目前增强版的打包和接入代码针对 **Windows 桌面 + 本机／WSL／SSH 代理**。原 CrossPet 的 macOS 源码完整保留，`npm run build:mac:upstream` 构建的是原生 Mac 版，不包含本次 Windows 后台桥接；没有增强版 Linux GUI 构建。
 
-## 从已有 Clawd 切换
+## 来源与授权
 
-1. 从托盘菜单退出原 Clawd。
-2. 备份 `%APPDATA%\clawd-on-desk` 中的设置与所需接入配置。
-3. 启动 CrossPet Plus，在主题页选择 **CrossPet · 随模型切换** 或固定角色。
-4. 在接入页检查本机／WSL／SSH 的已有连接；需要重新配对或信任时，按原界面完成。
+固定上游提交见 [UPSTREAMS.json](UPSTREAMS.json)。
 
-本项目沿用 Clawd 的用户设置目录、hook 协议和单实例锁，便于迁移；两者应交替运行。已有配置的自动审批偏好会被保留，因此切换时请关闭自动审批并打开危险操作提醒。安装／部署不会替你批准后续命令。
-
-DSH 中的“鲸鲸”人格、记忆、QQ 和 B 站配置独立于本应用。关闭 DSH 不影响本桌宠监控开发任务。
-
-## 源码和授权
-
-- 原 CrossPet 代码：MIT，保留 [原许可证](LICENSE) 和 [原始说明](README-CROSSPET-UPSTREAM.md)。
-- Clawd 内核及新增集成代码：AGPL-3.0-only，见 [许可证](LICENSE-AGPL-3.0)、[来源记录](desktop/UPSTREAM.md) 和 [第三方说明](desktop/THIRD_PARTY.md)。
-- CrossPet 角色、美术和衍生动画：**CC BY-NC-SA 4.0，仅限非商业使用，并须署名和相同方式共享**，见 [角色授权及原作者](characters/LICENSE.md)。
-- Clawd 自带的受限像素角色和原配饰美术不包含在本衍生版内。界面图标、替代配饰和提示音由本项目生成。
-
-这是非官方同人项目，与各 AI 产品公司无关。AGPL 代码授权不会改变美术素材的单独授权。
+- CrossPet 原代码：MIT，[许可证](LICENSE)、[原始说明](README-CROSSPET-UPSTREAM.md)。
+- Clawd 与新增桥接代码：AGPL-3.0-only，[许可证](LICENSE-AGPL-3.0)、[来源](desktop/UPSTREAM.md)、[第三方说明](desktop/THIRD_PARTY.md)。
+- CrossPet 角色和美术：CC BY-NC-SA 4.0，须署名、非商业、相同方式共享，[授权与角色作者](characters/LICENSE.md)。
+- 不包含 Clawd 受限像素角色美术。代码授权不改变美术的独立授权。
