@@ -733,6 +733,10 @@ describe("server-route-state POST", () => {
       const body = buildStateBody(name, { session_id: rawId, prompt_id: "original", ...extra },
         () => ({ pid: null }));
       assert.ok(body);
+      // This fixture exercises local execution. A WSL test runner must not
+      // turn it into a remote source via the hook's real host detection.
+      delete body.host;
+      delete body.wsl_distro;
       return callStatePost(JSON.stringify(body), { ctx: {
         sessions: api.sessions, observeClaudeToolPhase: api.observeClaudeToolPhase, updateSession: api.updateSession,
       } });

@@ -47,6 +47,10 @@ test("command labels retain the useful prefix before redirects and long argument
     ["echo 2 > test.log", "echo 2"],
     ["npm run build\necho done", "npm run build"],
     ['curl -H "Authorization: secret" https://example.com', "curl"],
+    ['& "C:\\Program Files\\nodejs\\npm.cmd" run build:win 2>&1', "npm run build"],
+    ['"C:\\Program Files\\Git\\bin\\GIT.EXE" status --short', "git status"],
+    ['C:\\Python313\\python.exe -m pytest tests', "python -m pytest"],
+    ['& dotnet.exe build -c Release', "dotnet build"],
   ]) assert.equal(commandLabelFromInput({ command }), expected);
   assert.equal(normalizeCommandPreview({ label: "npm run build:mac", status: "running" }).label, "npm run build");
 });

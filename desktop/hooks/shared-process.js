@@ -35,7 +35,7 @@ function commandLabelFromInput(input) {
     const token = match[0];
     if (!words.length && token === "&") continue;
     if (/^(?:&&|\|\||[;&|<>\r\n])$/.test(token)) {
-      if ((token === ">" || token === "<") && words.length > 1 && /^\d+$/.test(words.at(-1))
+      if ((token === ">" || token === "<") && words.length > 1 && /^\d+$/.test(words[words.length - 1])
         && previous.index + previous[0].length === match.index) words.pop();
       break;
     }
@@ -44,8 +44,10 @@ function commandLabelFromInput(input) {
     previous = match;
   }
   if (!words.length) return "";
-  const name = words[0].replace(/["']/g, "").split(/[\\/]/).pop();
+  let name = words[0].replace(/["']/g, "").split(/[\\/]/).pop();
   if (!/^[\p{L}\p{N}_.+-]{1,64}$/u.test(name)) return "";
+  const portable = name.replace(/\.(?:exe|cmd|bat)$/i, "").toLowerCase();
+  if (/^(?:npm|pnpm|yarn|bun|git|docker|podman|cargo|go|dotnet|make|gradle|mvn|kubectl|helm|uv|npx|bunx|python(?:3(?:\.\d+)?)?)$/.test(portable)) name = portable;
   const args = words.slice(1).map(word => word.replace(/^(["'])(.*)\1$/, "$2"));
   const valueOptions = new Set(["--prefix", "--workspace", "-w", "--cwd", "--dir", "-C", "--context", "--project-directory",
     "--token", "--password", "--user", "--username", "--registry", "--cache", "--filter", "--config", "--userconfig", "--globalconfig", "--store-dir", "-F"]);
@@ -92,7 +94,7 @@ function commandOutputSummary(value, status) {
   const text = value.slice(-8192).replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "")
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
   const lines = text.split(/[\r\n]+/).map(line => line.trim().replace(/^[ℹ#]\s*/, "").replace(/^=+\s*|\s*=+$/g, "").trim());
-  for (const line of lines.toReversed()) {
+  for (const line of lines.slice().reverse()) {
     const nodeCount = line.match(/^(pass|fail)\s+(\d+)$/i);
     if (nodeCount) {
       if (nodeCount[1].toLowerCase() === "fail" && /^0+$/.test(nodeCount[2])) continue;

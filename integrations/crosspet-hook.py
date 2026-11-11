@@ -725,6 +725,25 @@ def command_words(value):
         command = shlex.join(str(part) for part in command)
     if not isinstance(command, str):
         return []
+    # PowerShell's call operator and Windows paths are not POSIX shell syntax.
+    # Do not let shlex remove path backslashes or treat the leading '&' as the
+    # end of the command. This is display-only parsing; nothing is evaluated.
+    windows_command = bool(re.match(r"\s*&\s*", command) or re.match(r'''\s*["']?(?:[A-Za-z]:[\\/]|\\\\)''', command))
+    if windows_command:
+        words, previous_end = [], 0
+        for match in re.finditer(r'''(?:[^\s;&|<>'"]+|"[^"]*"|'[^']*')+|&&|\|\||[;&|<>\r\n]''', command[:8192]):
+            token = match.group()
+            if not words and token == "&":
+                continue
+            if token in ("&&", "||", ";", "&", "|", "<", ">", "\r", "\n"):
+                if token in ("<", ">") and len(words) > 1 and words[-1].isdigit() and previous_end == match.start():
+                    words.pop()
+                break
+            words.append(re.sub(r'''(["'])(.*?)\1''', r"\2", token))
+            previous_end = match.end()
+        if words:
+            words[0] = re.split(r"[\\/]", words[0])[-1]
+        return words
     # Operators inside quoted arguments belong to that argument. Shell expansion is never evaluated.
     quote, escaped, segment = "", False, []
     token_start = 0
@@ -771,6 +790,10 @@ def command_label_from_input(value) -> str:
     command = command_name_from_input(value)
     if not command:
         return ""
+    # npm.cmd / GIT.EXE have the same useful subcommands as npm / git.
+    portable = re.sub(r"\.(?:exe|cmd|bat)$", "", command, flags=re.I).lower()
+    if portable in ("npm", "pnpm", "yarn", "bun", "git", "docker", "podman", "cargo", "go", "dotnet", "make", "gradle", "mvn", "kubectl", "helm", "uv", "npx", "bunx") or re.fullmatch(r"python(?:3(?:\.\d+)?)?", portable):
+        command = portable
     args = words[1:]
     value_options = {"--prefix", "--workspace", "-w", "--cwd", "--dir", "-C", "--context", "--project-directory",
                      "--token", "--password", "--user", "--username", "--registry", "--cache", "--filter", "--config", "--userconfig", "--globalconfig", "--store-dir", "-F"}

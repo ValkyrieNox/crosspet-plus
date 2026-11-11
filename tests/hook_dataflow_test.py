@@ -81,6 +81,10 @@ class HookDataflowTest(unittest.TestCase):
             ("curl -H 'secret' https://example.com", "curl"),
             ("curl --token hidden", "curl"),
             ("echo 你好世界你好世界", "echo"),
+            (r'& "C:\Program Files\nodejs\npm.cmd" run build:win 2>&1', "npm run build"),
+            (r'"C:\Program Files\Git\bin\GIT.EXE" status --short', "git status"),
+            (r'C:\Python313\python.exe -m pytest tests', "python -m pytest"),
+            (r'& dotnet.exe build -c Release', "dotnet build"),
         ]
         for command, expected in examples:
             with self.subTest(command=command):
