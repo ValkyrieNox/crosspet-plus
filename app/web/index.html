@@ -59,19 +59,6 @@ html.aura-off #aura, html.aura-off .aura-rings { display: none; }
 html.frozen *, html.frozen *::before, html.frozen *::after { animation-play-state: paused !important; }
 /* 多会话：每个正在干活的对话一张小卡片，放在桌宠两侧 / 四个角 */
 #cards { position: absolute; inset: 0; pointer-events: none; }
-/* 子代理独立计数：一张父任务卡片可以带多个帮手，不冒充多个主任务。 */
-#collaboration { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); z-index: 2;
-  padding: 3px 9px; border: 1px solid #b9a3dd; border-radius: 11px; background: rgba(255,255,255,.94);
-  color: #644b88; font-size: 11px; text-align: center; white-space: nowrap; --pulse-time: 1.8s; }
-#collaboration[hidden] { display: none; }
-#collaboration[data-tier="2"] { --pulse-time: 1.3s; }
-#collaboration[data-tier="3"] { --pulse-time: .9s; }
-#collaboration .helpers { display: flex; justify-content: center; gap: 7px; height: 10px; margin-top: 2px; }
-#collaboration i { display: block; width: 7px; height: 7px; border-radius: 50%; background: #a18ac7;
-  animation: helperPulse var(--pulse-time) ease-in-out infinite; }
-#collaboration i:nth-child(2) { animation-delay: -.3s; }
-#collaboration i:nth-child(3) { animation-delay: -.6s; }
-@keyframes helperPulse { 50% { transform: translateY(-2px) scale(1.15); background: #d3b7ef; } }
 .scard { position: absolute; width: 66px; height: 56px; transition: left .35s ease, top .35s ease, opacity .35s ease, transform .35s ease; opacity: 0; transform: scale(.6); }
 .scard.on { opacity: .72; transform: scale(.92); }
 .scard.on.focus { opacity: 1; transform: scale(1.06); }
@@ -217,7 +204,7 @@ html.no-name #caption { display: none; }
     <div id="aura"></div><div id="shadow"></div>
     <div id="body"><img id="a" class="on"><img id="b"><img id="blink"></div>
     <div id="fx"></div>
-    <div id="cards"><div id="more"></div><div id="collaboration" hidden></div></div>
+    <div id="cards"><div id="more"></div></div>
     <div id="newsCard" class="hidden"><div id="newsText"></div><div class="btns"><button class="go" data-action="news-open">去看看 ›</button><button data-action="news-close">知道了</button></div></div>
     <div id="poof"><i style="--dx:-60px;--dy:-30px"></i><i style="--dx:55px;--dy:-35px"></i><i style="--dx:-45px;--dy:40px"></i><i style="--dx:50px;--dy:35px"></i><i style="--dx:0;--dy:-60px"></i></div>
   </div>
@@ -246,7 +233,6 @@ addEventListener('error', e => {
 <script src="whats-new.js"></script>
 <script src="peak-hours.js"></script>
 <script src="companions.js"></script>
-<script src="collaboration.js"></script>
 <script src="friendship.js"></script>
 <script src="pair-chat.js"></script>
 <script>
@@ -904,7 +890,6 @@ function setCharacter(id, quiet) {
     const m = multi; multi = null
     clearInterval(m.flipTimer); clearTimeout(m.recheck); clearTimeout(m.chatter); clearTimeout(m.sayTimer)
     for (const c of m.cards.values()) c.el.remove(); $('more').classList.remove('on')
-    $('collaboration').hidden = true
   }
   dropTimers()
   characterTarget = id
@@ -1285,7 +1270,7 @@ function setPageHidden(h) { pageHidden = !!h; applyFxRate() }
 applyFxRate()
 
 // ---- 多会话：同一个 AI 好几个对话同时在干活 ----
-// 外壳把 <角色>-sessions.json（{会话id: {pose, event, ts, subagents?}}）交过来。两个以上同时在干活时她「手忙脚乱」：
+// 外壳把 <角色>-sessions.json（{会话id: {pose, event, ts}}）交过来。两个以上同时在干活时她「手忙脚乱」：
 // 左右两帧来回切（busy_left / busy_right；三个以上换更崩溃的 swamped_*），每个对话一张小卡片演它正在做的事，
 // 她转向哪边，哪边的卡片就亮。干完的卡片打绿勾、出错的变红抖一下，停几秒后消失；有对话在等你回答时她换成「等你回答」
 // sessions.current 是多模型宿主（Cursor 等）认不出角色的那些模型的会话（current-sessions.json），不改名、单独放：
@@ -1293,7 +1278,7 @@ applyFxRate()
 const sessions = {}         // 角色（或 'current'）→ {会话id: {pose, event, ts}}
 const SESSION_DONE_SHOW = 4  // 干完 / 出错的卡片停几秒
 const SESSION_FLIP = 1500    // 左右两帧多久换一次
-let multi = null             // 正在演：{ side, busy(父任务数), subagents, flipTimer, cards, order }
+let multi = null             // 正在演：{ side, flipTimer, cards: Map(会话id → {el, pose, shownAt, pending}), order: [会话id] }
 
 function setSessions(id, map) {
   sessions[id] = map || {}
@@ -1319,10 +1304,9 @@ function refreshMulti() {
   const map = currentSessions(), now = Date.now() / 1000
   const live = Object.entries(map).map(([sid, e]) => [sid, e, sessionKind(e, now)]).filter(x => x[2])
   const busy = live.filter(x => x[2] === 'work' || x[2] === 'ask').length
-  const subagents = Collaboration.count(live)
-  if (!multi && ((busy < 2 && !subagents) || egg || farewellLine !== null || updatingNow)) return
-  // 单任务仍有子代理时继续协作；子代理归零后，等完成卡片演完再恢复单任务。
-  if (multi && busy < 2 && !subagents && !live.some(x => x[2] === 'done' || x[2] === 'error')) return endMulti()
+  if (!multi && (busy < 2 || egg || farewellLine !== null || updatingNow)) return
+  // 只剩一个（或没有）对话在干活：等干完 / 出错的卡片演完（几秒），她就恢复成平常一个对话的样子
+  if (multi && busy < 2 && !live.some(x => x[2] === 'done' || x[2] === 'error')) return endMulti()
   if (!multi) startMulti()
   lastActive = Date.now()
   // 卡片顺序固定（先来的在前），不会跳来跳去；最多 4 张，多的显示「+N」
@@ -1354,7 +1338,6 @@ function refreshMulti() {
   $('more').textContent = extra > 0 ? `+${extra}` : ''
   $('more').classList.toggle('on', extra > 0)
   multi.busy = busy
-  multi.subagents = subagents
   multi.asking = live.some(x => x[2] === 'ask')
   multiPose()
   // 干完的卡片过几秒自己消失：到时候再看一遍
@@ -1386,7 +1369,7 @@ function flipCard(c) {
 }
 function startMulti() {
   clearTimeout(thinkTimer); clearTimeout(pending); clearTimeout(revertTimer); clearTimeout(stuckTimer)
-  multi = { side: 'left', cards: new Map(), order: [], busy: 0, subagents: 0, asking: false }
+  multi = { side: 'left', cards: new Map(), order: [], busy: 0, asking: false }
   $('fx').classList.add('hide')
   multi.flipTimer = setInterval(() => { if (multi && !multi.asking) { multi.side = multi.side === 'left' ? 'right' : 'left'; multiPose() } }, SESSION_FLIP)
   chatterLater()
@@ -1398,7 +1381,7 @@ function chatterLater() {
   clearTimeout(multi.chatter)
   multi.chatter = setTimeout(() => {
     if (!multi) return
-    if (!multi.asking && $('bubble').classList.contains('hide')) multiSay(multi.subagents ? 'delegating' : multi.busy >= 3 ? 'swamped' : 'busy')
+    if (!multi.asking && $('bubble').classList.contains('hide')) multiSay(multi.busy >= 3 ? 'swamped' : 'busy')
     chatterLater()
   }, 35000 + Math.random() * 20000)
 }
@@ -1411,23 +1394,12 @@ function multiSay(kind) {
 }
 function multiPose() {
   if (!multi) return
-  const tier = Collaboration.tier(multi.subagents)
-  const level = multi.asking ? 'asking' : tier ? `collaboration-${tier}` : multi.busy >= 3 ? 'swamped' : 'busy'
-  if (level !== multi.said && (level !== 'busy' || !multi.said)) multiSay(tier && !multi.asking ? 'delegating' : level)
+  const level = multi.asking ? 'asking' : multi.busy >= 3 ? 'swamped' : 'busy'
+  if (level !== multi.said && (level !== 'busy' || !multi.said)) multiSay(level)   // 从太忙降回两个时不再说
   multi.said = level
-  const badge = $('collaboration')
-  badge.hidden = !tier || multi.asking
-  if (!badge.hidden) {
-    const signature = `${tier}:${multi.subagents}`
-    if (badge.dataset.signature !== signature) {
-      badge.dataset.signature = signature; badge.dataset.tier = String(tier)
-      badge.innerHTML = `<span>子代理 ×${multi.subagents}</span><div class="helpers" aria-hidden="true">${'<i></i>'.repeat(tier)}</div>`
-    }
-    badge.setAttribute('aria-label', `${multi.busy} 个主任务，${multi.subagents} 个子代理`)
-  }
   if (multi.asking) { if (pose !== 'asking') { setPose('asking'); $('fx').classList.add('hide') } }
   else {
-    const p = tier ? Collaboration.pose(multi.subagents, multi.side) : `${multi.busy >= 3 ? 'swamped' : 'busy'}_${multi.side}`
+    const p = `${multi.busy >= 3 ? 'swamped' : 'busy'}_${multi.side}`
     if (pose !== p) { setPose(p, true); $('fx').classList.add('hide') }
   }
   for (const c of multi.cards.values()) c.el.classList.toggle('focus', !multi.asking ? c.side === multi.side : c.el.classList.contains('ask'))
@@ -1437,7 +1409,6 @@ function endMulti() {
   clearInterval(multi.flipTimer); clearTimeout(multi.recheck); clearTimeout(multi.sayTimer); clearTimeout(multi.chatter)
   for (const c of multi.cards.values()) { c.el.classList.remove('on'); setTimeout(() => c.el.remove(), 400) }
   $('more').classList.remove('on')
-  $('collaboration').hidden = true
   multi = null
   shownAt = 0
   // 回到只剩的那一个对话的样子（没有就是待机）
@@ -1462,7 +1433,6 @@ function diagnoseDisplay() {
     spare: { file: file(spare), complete: spare.complete },
     swapping: $('stage').classList.contains('swap'), tucked, egg: egg ? egg.host || true : false, pageHidden,
     imageErrors: imageErrors.slice(), verdicts: petVerdicts.slice(),
-    workload: multi ? { tasks: multi.busy, subagents: multi.subagents, subagentTier: Collaboration.tier(multi.subagents), waiting: multi.asking } : null,
   }
 }
 // 反馈「几只桌宠不对」附的多桌宠状态（FeedbackPlan.formatPets 排版）：设置、主桌宠占着谁、开着的程序、会话、网页算出来的那几只；
