@@ -61,6 +61,11 @@ def main():
         elif relative == "app/windows/src/Pet.Integrations.cs":
             data = data.replace(b'Open($"https://github.com/{Repo}/releases")',
                                 b'Open("https://github.com/lokicorvus/crosspet/releases")')
+        elif relative == "app/windows/src/Native.cs":
+            data = data.replace(
+                b'            // Inserting after a topmost foreground window promotes us back\n'
+                b'            // into its band (e.g. LockApp). Stay in the normal band instead.\n', b'')
+            data = data.replace(b'(GetWindowLong(front, GWL_EXSTYLE) & 0x8) == 0 && ', b'')
         elif relative in ADAPTERS:
             continue
         actual = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()

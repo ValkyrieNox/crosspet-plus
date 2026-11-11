@@ -73,7 +73,9 @@ namespace CrossPet
             var root = GetAncestor(front, 2); if (root != IntPtr.Zero) front = root;   // GA_ROOT
             var cls = new StringBuilder(64); GetClassName(front, cls, 64);
             GetWindowThreadProcessId(front, out var pid);
-            if (ZOrderRule.TuckBelow(cls.ToString(), pid == MyPid))   // 桌面、任务栏、自己的菜单下面不插（见 ZOrderRule）
+            // Inserting after a topmost foreground window promotes us back
+            // into its band (e.g. LockApp). Stay in the normal band instead.
+            if ((GetWindowLong(front, GWL_EXSTYLE) & 0x8) == 0 && ZOrderRule.TuckBelow(cls.ToString(), pid == MyPid))   // 桌面、任务栏、自己的菜单下面不插（见 ZOrderRule）
                 SetWindowPos(hwnd, front, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
 
