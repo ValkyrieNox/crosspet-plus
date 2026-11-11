@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -69,7 +70,7 @@ const OPTIONAL_LIBRARY_FILES = Object.freeze([
   "clawd-working-wizard.svg",
 ]);
 
-test("mouth policy covers the approved 38 stock sprites exactly", () => {
+upstreamArtworkTest("mouth policy covers the approved 38 stock sprites exactly", () => {
   const theme = themeLoader.loadTheme("clawd", { strict: true });
   const files = theme.customization.mouthAccessories.files;
   const stockFiles = Object.fromEntries(
@@ -105,7 +106,7 @@ test("mouth policy covers the approved 38 stock sprites exactly", () => {
   }
 });
 
-test("the boss extra keeps its authored cigar and never receives a second cigarette", () => {
+upstreamArtworkTest("the boss extra keeps its authored cigar and never receives a second cigarette", () => {
   const boss = fs.readFileSync(
     path.join(ROOT, "assets", "svg", "clawd-working-typing-boss.svg"),
     "utf8"
@@ -126,7 +127,7 @@ test("the boss extra keeps its authored cigar and never receives a second cigare
   );
 });
 
-test("optional animation-library SVGs never fall back to static moving accessories", () => {
+upstreamArtworkTest("optional animation-library SVGs never fall back to static moving accessories", () => {
   const theme = themeLoader.loadTheme("clawd", { strict: true });
   const head = theme.customization.accessories.files;
   const mouth = theme.customization.mouthAccessories.files;
@@ -170,7 +171,7 @@ test("optional animation-library SVGs never fall back to static moving accessori
   assert.strictEqual(mouth["clawd-static-base.svg"].followTarget, undefined);
 });
 
-test("head pose policy keeps headphones hatless and limits western-hat-only overrides", () => {
+upstreamArtworkTest("head pose policy keeps headphones hatless and limits western-hat-only overrides", () => {
   const theme = themeLoader.loadTheme("clawd", { strict: true });
   const base = theme.customization.accessories.files;
   const overrides = theme.customization.accessories.itemOverrides;
@@ -202,7 +203,7 @@ test("head pose policy keeps headphones hatless and limits western-hat-only over
   }
 });
 
-test("notification and wake anchors are named on the elements that own their motion", () => {
+upstreamArtworkTest("notification and wake anchors are named on the elements that own their motion", () => {
   const notification = fs.readFileSync(
     path.join(ROOT, "assets", "svg", "clawd-notification.svg"),
     "utf8"
@@ -235,7 +236,7 @@ test("notification and wake anchors are named on the elements that own their mot
   );
 });
 
-test("the canonical cigarette frame reproduces the pinned standard-pose coordinates", () => {
+upstreamArtworkTest("the canonical cigarette frame reproduces the pinned standard-pose coordinates", () => {
   const layout = accessoryLayout.computeDynamicAccessoryLayout({
     matrix: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
     mediaOffset: { x: 0, y: 0 },
@@ -251,7 +252,7 @@ test("the canonical cigarette frame reproduces the pinned standard-pose coordina
   assert.strictEqual(layout.height, 9);
 });
 
-test("every visible animated cigarette has a measured or authored hit envelope", () => {
+upstreamArtworkTest("every visible animated cigarette has a measured or authored hit envelope", () => {
   const theme = themeLoader.loadTheme("clawd", { strict: true });
   const files = theme.customization.mouthAccessories.files;
   const measured = require("../src/pet-accessory-hitbox")
@@ -270,7 +271,7 @@ test("every visible animated cigarette has a measured or authored hit envelope",
   );
 });
 
-test("Clawd lists its long-lived animations as object-channel SVGs", () => {
+upstreamArtworkTest("Clawd lists its long-lived animations as object-channel SVGs", () => {
   const theme = themeLoader.loadTheme("clawd", { strict: true });
   assert.deepStrictEqual(theme.rendering.objectChannelFiles, [
     "clawd-outlaw-bender.svg",
@@ -299,7 +300,7 @@ test("Clawd lists its long-lived animations as object-channel SVGs", () => {
   ]);
 });
 
-test("Clawd caps its long-lived object-channel animations to 24 discrete steps per second", () => {
+upstreamArtworkTest("Clawd caps its long-lived object-channel animations to 24 discrete steps per second", () => {
   const theme = themeLoader.loadTheme("clawd", { strict: true });
   assert.deepStrictEqual(theme.rendering.discreteSampling, {
     "clawd-working-thinking.svg": 24,
@@ -328,7 +329,7 @@ test("Clawd caps its long-lived object-channel animations to 24 discrete steps p
   });
 });
 
-test("bender uses the one-unit anti-crop viewBox and its measured face-plant hitbox", () => {
+upstreamArtworkTest("bender uses the one-unit anti-crop viewBox and its measured face-plant hitbox", () => {
   const theme = themeLoader.loadTheme("clawd", { strict: true });
   assert.deepStrictEqual(theme.idleEasterEggs, [{
     file: "clawd-outlaw-bender.svg",

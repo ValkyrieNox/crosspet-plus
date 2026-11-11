@@ -1,4 +1,6 @@
 "use strict";
+
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -6,7 +8,6 @@ const { EventEmitter } = require("node:events");
 const { buildStateBody } = require("../hooks/copilot-hook");
 const { handleStatePost } = require("../src/server-route-state");
 const createAgentRuntime = require("../src/agent-runtime-main");
-const themeLoader = require("../src/theme-loader");
 const { resolveSessionIdentity } = require("../src/session-key");
 const { buildSessionSnapshotEntry } = require("../src/state-session-snapshot");
 const { MAX_PENDING_AGE_MS } = require("../src/copilot-terminal-wait");
@@ -14,8 +15,8 @@ const { MAX_PENDING_AGE_MS } = require("../src/copilot-terminal-wait");
 // Exercise hook, route, runtime and display owners without opening a socket.
 function harness(t, { remote = false, wsl = false, headless = false, miniMode = false } = {}) {
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: Date.now() });
-  themeLoader.init(path.resolve(__dirname, "../src"));
-  const theme = themeLoader.loadTheme("clawd");
+
+  const theme = createRuntimeTheme("clawd");
   const renderer = [];
   const sounds = [];
   const snapshots = [];
@@ -465,8 +466,8 @@ test("copilot: entering and leaving mini mode restores the waiting pose without 
   else delete require.cache[miniPath];
   const bounds = { x: 600, y: 180, width: 120, height: 120 };
   const noop = () => {};
-  const { probeAssetCycle } = require("../src/animation-cycle");
-  const cycle = file => probeAssetCycle(path.resolve(__dirname, "../assets/svg", file)).ms;
+  // The integration exercises mini handoff timing, independent of artwork.
+  const cycle = () => 1000;
   const mini = initMini({
     theme: h.theme,
     get currentState() { return h.state.getCurrentState(); },

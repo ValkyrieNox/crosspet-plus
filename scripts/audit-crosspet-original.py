@@ -23,6 +23,14 @@ ADAPTERS = {
 }
 
 
+# Command-preview adaptations are pinned as complete files. Additional edits
+# to the renderer are still reported, including changes outside the terminal.
+TERMINAL_RENDERER_BLOBS = {
+    "app/web/index.html": "ab7e885cdd5f1c268e225ab5b070f44665079e73",
+    "app/web/effects.js": "e82c2fae11071a0bd772693d57c43101a0e3ecf3",
+}
+
+
 def git(*args):
     return subprocess.check_output(["git", *args], cwd=ROOT)
 
@@ -48,6 +56,9 @@ def main():
             failures.append("Missing original file: " + relative)
             continue
         data = path.read_bytes()
+        approved = TERMINAL_RENDERER_BLOBS.get(relative)
+        if approved and hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest() == approved:
+            continue
         if relative == "app/web/index.html":
             # The Mac bridge added only a backend-disconnection cleanup entry.
             # All original animation, input, timer and task code stays identical.

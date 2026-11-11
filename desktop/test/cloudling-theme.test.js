@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkSuite } = require("./helpers/upstream-artifacts");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
@@ -44,7 +45,7 @@ const CLOUDLING_ASSETS = [
 
 const CLOUDLING_SCRIPTED_FILES = CLOUDLING_ASSETS.filter((file) => file.endsWith(".svg") && file !== "cloudling-react-drag.svg");
 
-describe("built-in Cloudling theme", () => {
+upstreamArtworkSuite("built-in Cloudling theme", () => {
   it("loads as schema v1 with trusted scripted SVG files scoped to the built-in theme", () => {
     const theme = themeLoader.loadTheme("cloudling", { strict: true });
     const rendererConfig = themeLoader.createThemeContext(theme).getRendererConfig();

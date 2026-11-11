@@ -1,4 +1,6 @@
 "use strict";
+
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
 const { it } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
@@ -15,7 +17,6 @@ const { readCodexClientEphemeral, mergeCodexClientEphemeral, isPersistedCodexTra
 const { codexClientEphemeralClaim } = require("../hooks/codex-internal-worker");
 const { makeSessionKey } = require("../src/session-key");
 const initState = require("../src/state");
-const themeLoader = require("../src/theme-loader");
 const raw = "codex:aaaaaaaa-1111-4111-8111-111111111111";
 const id = makeSessionKey({ profileId: "local", rawSessionId: raw });
 const desktop = { id, agentId: "codex", codexOriginator: "Codex Desktop", state: "thinking" };
@@ -24,8 +25,8 @@ function harness(t, { platform = "win32", throughRuntime = false } = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "clawd-ephemeral-focus-"));
   const prior = process.env.CODEX_HOME; process.env.CODEX_HOME = home;
   t.after(() => { if (prior === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = prior; fs.rmSync(home, { recursive: true, force: true }); });
-  themeLoader.init(path.join(__dirname, "../src"));
-  const theme = JSON.parse(JSON.stringify(themeLoader.loadTheme("clawd"))); theme.timings.minDisplay = {};
+
+  const theme = JSON.parse(JSON.stringify(createRuntimeTheme("clawd"))); theme.timings.minDisplay = {};
   const noop = () => {};
   const ctx = { theme, lang: "en", pendingPermissions: [], doNotDisturb: false,
     processKill: () => true, focusHostPlatform: platform, getCursorScreenPoint: () => ({ x: 0, y: 0 }),

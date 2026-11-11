@@ -3,6 +3,7 @@
 // Registered in ~/.codex/hooks.json by hooks/codex-install.js
 
 const crypto = require("crypto");
+const { commandNameFromInput, buildCommandPreview } = require("./shared-process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -619,6 +620,12 @@ function buildStateBody(payload, resolve, options = {}) {
   const toolName = typeof payload.tool_name === "string" && payload.tool_name ? payload.tool_name : null;
   const toolUseId = normalizeToolUseId(payload.tool_use_id ?? payload.toolUseId ?? payload.toolUseID);
   const toolInput = payload.tool_input && typeof payload.tool_input === "object" ? payload.tool_input : null;
+  if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure") {
+    body.command_name = commandNameFromInput(toolInput);
+    const commandPreview = buildCommandPreview(toolInput, event, payload.tool_response ?? payload.tool_result,
+      { callId: toolUseId });
+    if (commandPreview) body.command_preview = commandPreview;
+  }
   const toolInputFingerprint = buildToolInputFingerprint(toolInput);
   if (toolName) body.tool_name = toolName;
   // Code Mode does not record nested function calls in JSONL. The completed

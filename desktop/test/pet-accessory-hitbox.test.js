@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
@@ -49,7 +50,7 @@ describe("accessory-aware hit boxes", () => {
     }
   });
 
-  it("keeps selected-accessory geometry size-aware without a one-size-fits-all envelope", () => {
+  upstreamArtworkTest("keeps selected-accessory geometry size-aware without a one-size-fits-all envelope", () => {
     const theme = themeLoader.loadTheme("clawd", { strict: true });
     for (const file of ["clawd-working-typing.svg", "clawd-working-building.svg"]) {
       const base = baseHitBox(theme, file);
@@ -75,7 +76,7 @@ describe("accessory-aware hit boxes", () => {
     }
   });
 
-  it("reaches the built-in safety helmet in the 3+ session building pose", () => {
+  upstreamArtworkTest("reaches the built-in safety helmet in the 3+ session building pose", () => {
     const theme = themeLoader.loadTheme("clawd", { strict: true });
     const box = theme.fileHitBoxes["clawd-working-building.svg"];
     const shared = theme.hitBoxes.default;
@@ -98,7 +99,7 @@ describe("accessory-aware hit boxes", () => {
     assert.strictEqual(box.y + box.h, shared.y + shared.h, "building hit box must not lower the floor");
   });
 
-  it("keeps a motion envelope for every animated built-in descriptor, and none spare", () => {
+  upstreamArtworkTest("keeps a motion envelope for every animated built-in descriptor, and none spare", () => {
     // The envelope table's individual numbers are the Electron CTM audit's job.
     // This is the structural half: a followTarget accessory rides the animation
     // and needs an envelope, a static one does not, and an envelope for a file
@@ -140,7 +141,7 @@ describe("accessory-aware hit boxes", () => {
     }
   });
 
-  it("keeps headphones hatless without hiding its animated mouth accessory", () => {
+  upstreamArtworkTest("keeps headphones hatless without hiding its animated mouth accessory", () => {
     const theme = themeLoader.loadTheme("clawd", { strict: true });
     const file = "clawd-headphones-groove.svg";
     const head = theme.customization.accessories.files[file];
@@ -152,7 +153,7 @@ describe("accessory-aware hit boxes", () => {
     assert.ok(BUILTIN_MOUTH_ACCESSORY_MOTION_PADDING.clawd[file]);
   });
 
-  it("keeps a separate measured envelope for every visible animated mouth descriptor", () => {
+  upstreamArtworkTest("keeps a separate measured envelope for every visible animated mouth descriptor", () => {
     const theme = themeLoader.loadTheme("clawd", { strict: true });
     const files = theme.customization.mouthAccessories.files;
     const animated = Object.keys(files).filter((file) => files[file] && files[file].followTarget);

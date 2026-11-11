@@ -34,6 +34,39 @@ const { getCodexLogEventKey } = require("../hooks/codex-log-event");
 const { normalizeCodexTurnId } = require("../src/codex-turn-id");
 const { normalizeCodexThreadId } = require("../src/codex-thread-id");
 const { planProgressFromCall } = require("../hooks/codex-plan-progress");
+const { commandNameFromInput, buildCommandPreview } = require("../hooks/shared-process");
+
+// Keep only display-safe previews while correlating concurrent shell results.
+function observeCommandPreview(entry, key, payload) {
+  if (key === "event_msg:task_started" || key === "event_msg:task_complete"
+    || key === "event_msg:turn_aborted") {
+    entry.commandPreviews = new Map();
+    entry.activeCommandCallId = null;
+    return null;
+  }
+  if (!payload || typeof payload !== "object") return null;
+  const callId = typeof payload.call_id === "string" ? payload.call_id.slice(0, 200) : "";
+  if (key === "response_item:function_call") {
+    const preview = buildCommandPreview(payload.arguments, "PreToolUse", null, { callId });
+    if (!preview) return null;
+    entry.activeCommandCallId = callId;
+    if (!(entry.commandPreviews instanceof Map)) entry.commandPreviews = new Map();
+    if (callId) {
+      entry.commandPreviews.set(callId, preview);
+      while (entry.commandPreviews.size > 32) entry.commandPreviews.delete(entry.commandPreviews.keys().next().value);
+    }
+    return preview;
+  }
+  if (key !== "response_item:function_call_output" && key !== "event_msg:exec_command_end") return null;
+  const previous = entry.commandPreviews?.get(callId);
+  if (!callId || !previous) return null;
+  const response = key === "response_item:function_call_output" ? payload.output : payload;
+  const preview = buildCommandPreview({ cmd: previous.label, ...(previous.sessionId ? { session_id: previous.sessionId } : {}) }, "CommandResult", response, { callId });
+  if (!preview) return null;
+  entry.commandPreviews.set(callId, preview);
+  if (callId !== entry.activeCommandCallId || JSON.stringify(previous) === JSON.stringify(preview)) return null;
+  return preview;
+}
 
 function matchesSessionMetaIdentity(payload, sessionId) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
@@ -1869,6 +1902,9 @@ class CodexLogMonitor {
       ? (payload.call_id || payload.tool_use_id || payload.id)
       : null;
     const turnExtra = {
+      ...(key === "response_item:function_call" && commandNameFromInput(payload.arguments)
+        ? { commandName: commandNameFromInput(payload.arguments), toolName: payload.name }
+        : {}),
       ...(effectiveTurnId ? { turnId: effectiveTurnId, recapDedupeId: effectiveTurnId } : {}),
       ...(Number.isFinite(parsedOccurredAt) ? { recapOccurredAt: parsedOccurredAt } : {}),
       ...(typeof rawToolUseId === "string" && rawToolUseId ? { toolUseId: rawToolUseId } : {}),
@@ -1903,6 +1939,13 @@ class CodexLogMonitor {
         finishTurnTerminal();
         return;
       }
+    }
+
+    const commandPreview = observeCommandPreview(tracked, key, payload);
+    if (commandPreview) turnExtra.commandPreview = commandPreview;
+    if (commandPreview && (key === "response_item:function_call_output" || key === "event_msg:exec_command_end")) {
+      if (!tracked.backfilling) this._emitStateChange(tracked, tracked.lastState || "idle", key, turnExtra);
+      return;
     }
 
     // A separate child-own fence. Never send a child's turn id through the
@@ -2356,7 +2399,7 @@ class CodexLogMonitor {
       }
       return true;
     }
-    if (!tracked.pendingUserInputs.has(record.callId)) return true;
+    if (!tracked.pendingUserInputs.has(record.callId)) return false;
     const request = tracked.pendingUserInputs.get(record.callId);
     tracked.pendingUserInputs.delete(record.callId);
     if (!tracked.backfilling && !tracked.initializingUserInputs && this._onUserInputResolved) {

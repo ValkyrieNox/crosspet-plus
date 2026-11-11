@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -16,7 +17,7 @@ const ALL_READMES = [
   "README.es.md",
 ];
 
-test("all other README variants expose Spanish navigation without a Spanish self-link", () => {
+upstreamRepositoryTest("all other README variants expose Spanish navigation without a Spanish self-link", () => {
   for (const file of ALL_READMES.filter((name) => name !== "README.es.md")) {
     const source = fs.readFileSync(path.join(ROOT, file), "utf8");
     assert.match(source, /href="README\.es\.md"/, `${file} should link to README.es.md`);
@@ -134,7 +135,7 @@ function extractContributorSection(markdown, filename) {
   return markdown.slice(start, end === -1 ? markdown.length : end);
 }
 
-test("every README shows the generated maintainer and contributor images", () => {
+upstreamRepositoryTest("every README shows the generated maintainer and contributor images", () => {
   for (const filename of ALL_READMES) {
     const markdown = fs.readFileSync(path.join(ROOT, filename), "utf8");
     assert.match(markdown, /<img src="assets\/readme\/maintainers\.svg"/, `${filename} should show maintainers`);
@@ -142,7 +143,7 @@ test("every README shows the generated maintainer and contributor images", () =>
   }
 });
 
-test("README contributor sections stay visible", () => {
+upstreamRepositoryTest("README contributor sections stay visible", () => {
   for (const filename of ALL_READMES) {
     const markdown = fs.readFileSync(path.join(ROOT, filename), "utf8");
     const section = extractContributorSection(markdown, filename);
@@ -151,14 +152,14 @@ test("README contributor sections stay visible", () => {
   }
 });
 
-test("contributor image includes verified GitHub contributors", () => {
+upstreamRepositoryTest("contributor image includes verified GitHub contributors", () => {
   const logins = new Set(svgLogins(CONTRIBUTORS_SVG));
   for (const login of VERIFIED_GITHUB_CONTRIBUTORS) {
     assert.ok(logins.has(login), `contributors.svg should include ${login}`);
   }
 });
 
-test("README avatar images exactly match Settings About (run npm run generate:readme-contributors)", () => {
+upstreamRepositoryTest("README avatar images exactly match Settings About (run npm run generate:readme-contributors)", () => {
   const { maintainers, contributors } = loadSettingsLists();
   assert.strictEqual(new Set(contributors).size, contributors.length, "Settings contributors should not contain duplicates");
   assert.deepStrictEqual(svgLogins(MAINTAINERS_SVG), maintainers, "maintainers.svg should match Settings About");

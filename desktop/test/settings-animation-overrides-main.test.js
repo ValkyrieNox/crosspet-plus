@@ -1,5 +1,7 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const test = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -11,10 +13,8 @@ const {
   registerSettingsAnimationOverridesIpc,
 } = createSettingsAnimationOverridesMain;
 const animationOverrideTest = createSettingsAnimationOverridesMain.__test;
-const themeLoader = require("../src/theme-loader");
 const { createTranslator } = require("../src/i18n");
 
-themeLoader.init(path.join(__dirname, "..", "src"));
 
 // A real src/state.js instance for tests that need the true preview-ownership
 // contract (mini remaps, display revision) rather than the harness fake.
@@ -947,7 +947,7 @@ test("a partial landing after a previous preview hands back by its own revision"
 });
 
 test("a mini-working preview keeps ownership and is handed back by the settings timer", () => {
-  const cloudling = themeLoader.loadTheme("cloudling");
+  const cloudling = createRuntimeTheme("cloudling");
   const { api } = createRealStateRuntime({ theme: cloudling, miniMode: true });
   const harness = createRuntimeHarness({ stateRuntime: api, activeTheme: cloudling });
   try {

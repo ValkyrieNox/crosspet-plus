@@ -390,18 +390,17 @@ test("package lifecycle and launch wiring cover install and development entry po
   );
 });
 
-test("repository and CI use the supported Node contract", () => {
-  const rootDir = path.join(__dirname, "..");
-  const pkg = require("../package.json");
-  assert.equal(pkg.engines.node, ">=22.12.0");
-  assert.equal(fs.readFileSync(path.join(rootDir, ".nvmrc"), "utf8").trim(), "24.18.0");
-
-  for (const workflowPath of [
-    ".github/workflows/build.yml",
-    ".github/workflows/wayland-smoke.yml",
-  ]) {
-    const workflow = fs.readFileSync(path.join(rootDir, workflowPath), "utf8");
-    assert.match(workflow, /node-version-file:\s*\.nvmrc/);
-    assert.doesNotMatch(workflow, /node-version:\s*20/);
+test("repository and Plus CI use the supported Node contract", () => {
+  const rootDir = path.join(__dirname, "..", "..");
+  const backend = require("../package.json");
+  const workspace = require("../../package.json");
+  assert.equal(backend.engines.node, ">=22.12.0");
+  assert.equal(workspace.engines.node, backend.engines.node);
+  const workflow = require("js-yaml").load(fs.readFileSync(path.join(rootDir, ".github/workflows/build-desktop.yml"), "utf8"));
+  for (const job of [workflow.jobs.macos, workflow.jobs.windows]) {
+    const node = job.steps.find(step => step.uses === "actions/setup-node@v4");
+    assert.ok(node, "each native build installs Node");
+    assert.equal(node.with["node-version"], "22");
+    assert.equal(node.with["cache-dependency-path"], "desktop/package-lock.json");
   }
 });

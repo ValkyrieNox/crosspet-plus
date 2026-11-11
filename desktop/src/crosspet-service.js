@@ -48,7 +48,9 @@ function projectSession(id, session, pending) {
   // the current activity, rather than treating that parent as completed.
   const visualEvent = subagents > 0 && (event === "Stop" || event === "SessionEnd") ? "SubagentActivity" : event;
   return { key, character, client, pose, event: state === "attention" ? "Stop" : visualEvent,
-    tool, ts: timestamp > 1e11 ? timestamp / 1000 : timestamp,
+    tool, commandName: session.commandName || "", ts: timestamp > 1e11 ? timestamp / 1000 : timestamp,
+    commandPreview: session.commandPreview || null,
+    commandPreviewAt: session.commandPreviewAt ? session.commandPreviewAt / 1000 : null,
     subagents };
 }
 function defaultStateDir() {

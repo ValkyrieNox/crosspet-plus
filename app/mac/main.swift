@@ -6,6 +6,26 @@ import WebKit
 // 往已经退出的子进程（codex app-server）写东西时，系统默认发 SIGPIPE 把整个 App 杀掉：忽略它，写失败只返回错误
 signal(SIGPIPE, SIG_IGN)
 
+// This copied executable survives replacement of the running application bundle.
+if let index = CommandLine.arguments.firstIndex(of: "--crosspet-install-update") {
+    do {
+        guard index + 1 < CommandLine.arguments.count else { throw PlusUpdateInstaller.failure("缺少更新请求") }
+        let file = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+        let request = try JSONDecoder().decode(PlusUpdateRequest.self, from: Data(contentsOf: file))
+        try PlusUpdateInstaller.install(request)
+        exit(0)
+    } catch {
+        fputs("CrossPet 更新失败：\(error.localizedDescription)\n", stderr)
+        _ = NSApplication.shared
+        let alert = NSAlert()
+        alert.messageText = "自动更新没成功"
+        alert.informativeText = error.localizedDescription + "\n详情见 ~/Library/Logs/CrossPet-update.log"
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+        exit(1)
+    }
+}
+
 // 测试用：只问一次 GPT 额度，打印 JSON 就退出（tests/codex_quota_probe.sh）
 func probeResult(_ rl: [String: Any]?, _ err: String?, _ ms: Int) -> [String: Any] {
     CodexQuotaSource.payload(source: rl != nil ? "live" : "none", rateLimits: rl, error: rl != nil ? nil : err, ms: ms)

@@ -31,6 +31,39 @@ const {
 } = require("./codex-rate-limits");
 const { parseCodexUserInputRecord } = require("./codex-user-input");
 const { getCodexLogEventKey } = require("./codex-log-event");
+const { commandNameFromInput, buildCommandPreview } = require("./shared-process");
+
+// Keep only display-safe previews while correlating concurrent shell results.
+function observeCommandPreview(entry, key, payload) {
+  if (key === "event_msg:task_started" || key === "event_msg:task_complete"
+    || key === "event_msg:turn_aborted") {
+    entry.commandPreviews = new Map();
+    entry.activeCommandCallId = null;
+    return null;
+  }
+  if (!payload || typeof payload !== "object") return null;
+  const callId = typeof payload.call_id === "string" ? payload.call_id.slice(0, 200) : "";
+  if (key === "response_item:function_call") {
+    const preview = buildCommandPreview(payload.arguments, "PreToolUse", null, { callId });
+    if (!preview) return null;
+    entry.activeCommandCallId = callId;
+    if (!(entry.commandPreviews instanceof Map)) entry.commandPreviews = new Map();
+    if (callId) {
+      entry.commandPreviews.set(callId, preview);
+      while (entry.commandPreviews.size > 32) entry.commandPreviews.delete(entry.commandPreviews.keys().next().value);
+    }
+    return preview;
+  }
+  if (key !== "response_item:function_call_output" && key !== "event_msg:exec_command_end") return null;
+  const previous = entry.commandPreviews?.get(callId);
+  if (!callId || !previous) return null;
+  const response = key === "response_item:function_call_output" ? payload.output : payload;
+  const preview = buildCommandPreview({ cmd: previous.label, ...(previous.sessionId ? { session_id: previous.sessionId } : {}) }, "CommandResult", response, { callId });
+  if (!preview) return null;
+  entry.commandPreviews.set(callId, preview);
+  if (callId !== entry.activeCommandCallId || JSON.stringify(previous) === JSON.stringify(preview)) return null;
+  return preview;
+}
 
 // ── Inline config from agents/codex.js (zero-dependency requirement) ──
 
@@ -249,6 +282,14 @@ function buildPostStateBody(sessionId, state, event, cwd, isSubagent, host, extr
     body.assistant_last_output = extra.assistantLastOutput;
     if (extra.assistantLastOutputTruncated === true) body.assistant_last_output_truncated = true;
   }
+  if (extra && Object.hasOwn(extra, "commandName")) {
+    body.command_name = extra.commandName;
+    body.tool_name = extra.toolName;
+  }
+  if (extra && extra.commandPreview) {
+    body.command_preview = extra.commandPreview;
+    if (event === "response_item:function_call_output" || event === "event_msg:exec_command_end") body.metadata_only = true;
+  }
   if (extra && extra.codexUserInput) {
     const request = extra.codexUserInput;
     body.codex_user_input = {
@@ -351,7 +392,7 @@ function processLine(line, entry, options = {}) {
   }
 
   const userInputRecord = parseCodexUserInputRecord(obj);
-  if (userInputRecord) {
+  if (userInputRecord && (userInputRecord.phase === "request" || entry.pendingUserInputs?.has(userInputRecord.callId))) {
     if (!(entry.pendingUserInputs instanceof Map)) entry.pendingUserInputs = new Map();
     const postStateFn = typeof options.postState === "function" ? options.postState : postState;
     if (userInputRecord.phase === "request") {
@@ -407,6 +448,15 @@ function processLine(line, entry, options = {}) {
     ) return;
   }
 
+  const commandPreview = observeCommandPreview(entry, key, payload);
+  if (commandPreview && (key === "response_item:function_call_output" || key === "event_msg:exec_command_end")) {
+    if (!entry.backfilling && !entry.initializing) {
+      const postStateFn = typeof options.postState === "function" ? options.postState : postState;
+      sendTrackedState(entry, postStateFn, entry.lastState || "idle", key, entry.cwd, entry.isSubagent, { commandPreview });
+    }
+    return;
+  }
+
   const assistantText = extractAssistantTextFromRecord(obj);
   if (assistantText) {
     const assistantOutput = clampAssistantOutputText(assistantText);
@@ -450,7 +500,8 @@ function processLine(line, entry, options = {}) {
   // back up (post working, refresh lastEventTime, clear stale). Without the
   // `!entry.stale` guard a session whose last state was "working" would stay
   // asleep through every subsequent working event until a state change.
-  if (finalState === entry.lastState && finalState === "working" && !entry.stale) return;
+  if (finalState === entry.lastState && finalState === "working" && !entry.stale
+    && key !== "response_item:function_call") return;
   entry.lastState = finalState;
   entry.lastEventTime = Date.now();
 
@@ -489,7 +540,9 @@ function processLine(line, entry, options = {}) {
       assistantLastOutput: entry.assistantLastOutput,
       assistantLastOutputTruncated: entry.assistantLastOutputTruncated === true,
     }
-    : null;
+    : key === "response_item:function_call"
+      ? { commandName: commandNameFromInput(payload.arguments), toolName: payload.name, ...(commandPreview ? { commandPreview } : {}) }
+      : null;
   sendTrackedState(entry, postStateFn, finalState, key, entry.cwd, entry.isSubagent, extra);
 }
 

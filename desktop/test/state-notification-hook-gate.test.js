@@ -1,13 +1,12 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const { describe, it, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert");
-const path = require("path");
-const themeLoader = require("../src/theme-loader");
 const { createTranslator } = require("../src/i18n");
 
-themeLoader.init(path.join(__dirname, "..", "src"));
-const defaultTheme = themeLoader.loadTheme("clawd");
+const defaultTheme = createRuntimeTheme("clawd");
 
 function makeCtx({ notificationHookEnabled = true } = {}) {
   const rendererEvents = [];

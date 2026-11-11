@@ -431,6 +431,7 @@ describe("theme-loader preview sound selection", () => {
           name: "Fallback Theme",
           sounds: {
             confirm: null,
+            complete: "complete.mp3",
           },
         }),
       },

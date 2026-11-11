@@ -1,11 +1,9 @@
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
 const { describe, it, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert");
-const path = require("path");
 
-// Load default theme for test ctx
-const themeLoader = require("../src/theme-loader");
-themeLoader.init(path.join(__dirname, "..", "src"));
-const _defaultTheme = themeLoader.loadTheme("clawd");
+// Explicit runtime bindings are independent of Plus service artwork.
+const _defaultTheme = createRuntimeTheme("clawd");
 
 function makeCtx() {
   return {
@@ -162,7 +160,6 @@ describe("default idle visual (getIdleVisualChoice ctx hook)", () => {
     assert.strictEqual(api.getCurrentSvg(), "clawd-idle-bubble.svg");
   });
 });
-
 
 describe("Claude design turn continuity", () => {
   let api;

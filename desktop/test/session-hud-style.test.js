@@ -1,3 +1,4 @@
+const { upstreamArtworkSuite } = require("./helpers/upstream-artifacts");
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -282,7 +283,7 @@ describe("session HUD visual shell", () => {
 // circle, so one shared zoom makes tiled marks render visibly smaller and
 // framed. This pins the per-provider zoom against the exporter's own manifest,
 // so adding a ring provider cannot silently inherit the wrong one.
-describe("quota ring glyph zoom follows the exporter's artwork ratio", () => {
+upstreamArtworkSuite("quota ring glyph zoom follows the exporter's artwork ratio", () => {
   const manifest = JSON.parse(fs.readFileSync(
     path.join(__dirname, "..", "assets", "source", "agent-icons", "source-manifest.json"), "utf8"
   ));

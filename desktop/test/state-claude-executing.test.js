@@ -1,14 +1,14 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const loader = require("../src/theme-loader");
 const { createMemoryRecapSink } = require("../src/recap-sink");
-loader.init(path.join(__dirname, "..", "src"));
+
 
 function runtime(t, overrides = {}) {
-  const theme = structuredClone(loader.loadTheme("clawd"));
+  const theme = structuredClone(createRuntimeTheme("clawd"));
   theme.timings.minDisplay = {};
   const effects = [], sink = createMemoryRecapSink(), noop = () => {};
   const ctx = { theme, lang: "en", doNotDisturb: false, miniMode: false, miniTransitioning: false,

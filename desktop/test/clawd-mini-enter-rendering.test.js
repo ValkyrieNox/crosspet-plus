@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkSuite } = require("./helpers/upstream-artifacts");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
@@ -25,7 +26,7 @@ function miniStateSvg(theme, state) {
   return files[0];
 }
 
-describe("Clawd mini enter SVG rendering", () => {
+upstreamArtworkSuite("Clawd mini enter SVG rendering", () => {
   it("does not force crisp root rendering on rotated mini enter assets", () => {
     const theme = JSON.parse(fs.readFileSync(CLAWD_THEME_PATH, "utf8"));
 

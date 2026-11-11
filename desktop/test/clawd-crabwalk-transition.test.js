@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 // Static contract for the idle -> crabwalk handoff. The renderer cuts between
 // clawd-idle-follow.svg and clawd-mini-crabwalk.svg, so the walk must start at
@@ -85,7 +86,7 @@ function loadCrabwalk(file = process.env.CRABWALK_SVG || DEFAULT_SVG) {
 const BODY_SHADOW = /body|shadow/;
 const isLeg = (r) => /leg/.test(r.selector);
 
-test("one-shot intro starts exactly at the rest pose (no teleport between idle and the walk)", () => {
+upstreamArtworkTest("one-shot intro starts exactly at the rest pose (no teleport between idle and the walk)", () => {
   const { keyframes, rules } = loadCrabwalk();
   const intros = rules.filter((r) => !r.anim.infinite && r.anim.forwards && /intro/.test(r.selector));
   assert.ok(intros.length > 0,
@@ -103,7 +104,7 @@ test("one-shot intro starts exactly at the rest pose (no teleport between idle a
   }
 });
 
-test("looping body/shadow motion stays centred on rest with small amplitude", () => {
+upstreamArtworkTest("looping body/shadow motion stays centred on rest with small amplitude", () => {
   const { keyframes, rules } = loadCrabwalk();
   const loops = rules.filter((r) => r.anim.infinite && BODY_SHADOW.test(r.selector));
   assert.ok(loops.length > 0, "expected looping body/shadow animations");
@@ -120,7 +121,7 @@ test("looping body/shadow motion stays centred on rest with small amplitude", ()
   }
 });
 
-test("loops start after the intro so they do not fight it", () => {
+upstreamArtworkTest("loops start after the intro so they do not fight it", () => {
   const { rules } = loadCrabwalk();
   const intro = Math.max(...rules.filter((r) => !r.anim.infinite && /intro/.test(r.selector))
     .map((r) => r.anim.duration), 0);
@@ -131,7 +132,7 @@ test("loops start after the intro so they do not fight it", () => {
   }
 });
 
-test("legs keep the original 0.5s alternating step cadence", () => {
+upstreamArtworkTest("legs keep the original 0.5s alternating step cadence", () => {
   const { rules } = loadCrabwalk();
   const legs = rules.filter(isLeg);
   assert.equal(legs.length, 2, "expected leg-1 and leg-2 animations");

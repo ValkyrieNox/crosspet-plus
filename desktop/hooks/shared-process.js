@@ -7,6 +7,171 @@
 const { isRemoteHookMode, readRuntimeIdentity } = require("./server-config");
 const path = require("path");
 
+// Observation only. Drop arguments before sending a label to the pet.
+function commandNameFromInput(input) {
+  if (typeof input === "string") {
+    try { input = JSON.parse(input); } catch { return ""; }
+  }
+  let value = input?.command ?? input?.cmd ?? input?.CommandLine;
+  if (Array.isArray(value)) value = value[0];
+  if (typeof value !== "string") return "";
+  const words = value.slice(0, 8192).match(/(?:[^\s;&|<>'"]+|"[^"]*"|'[^']*')+/g) || [];
+  const word = words.find(token => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token));
+  const name = (word || "").replace(/["']/g, "").split(/[\\/]/).pop();
+  return /^[\p{L}\p{N}_.+-]{1,64}$/u.test(name) ? name : "";
+}
+
+function commandLabelFromInput(input) {
+  if (typeof input === "string") {
+    try { input = JSON.parse(input); } catch { return ""; }
+  }
+  let command = input?.command ?? input?.cmd ?? input?.CommandLine;
+  if (Array.isArray(command)) command = command.join(" ");
+  if (typeof command !== "string") return "";
+  const tokens = command.slice(0, 8192).matchAll(/(?:[^\s;&|<>'"]+|"[^"]*"|'[^']*')+|&&|\|\||[;&|<>\r\n]/g);
+  const words = [];
+  let previous;
+  for (const match of tokens) {
+    const token = match[0];
+    if (!words.length && token === "&") continue;
+    if (/^(?:&&|\|\||[;&|<>\r\n])$/.test(token)) {
+      if ((token === ">" || token === "<") && words.length > 1 && /^\d+$/.test(words.at(-1))
+        && previous.index + previous[0].length === match.index) words.pop();
+      break;
+    }
+    if (!words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue;
+    words.push(token);
+    previous = match;
+  }
+  if (!words.length) return "";
+  const name = words[0].replace(/["']/g, "").split(/[\\/]/).pop();
+  if (!/^[\p{L}\p{N}_.+-]{1,64}$/u.test(name)) return "";
+  const args = words.slice(1).map(word => word.replace(/^(["'])(.*)\1$/, "$2"));
+  const valueOptions = new Set(["--prefix", "--workspace", "-w", "--cwd", "--dir", "-C", "--context", "--project-directory",
+    "--token", "--password", "--user", "--username", "--registry", "--cache", "--filter", "--config", "--userconfig", "--globalconfig", "--store-dir", "-F"]);
+  while (args[0]?.startsWith("-")) {
+    if (/^python(?:3(?:\.\d+)?)?$/.test(name) && args[0] === "-m" && /^[\w.-]+$/.test(args[1] || "")) return `${name} -m ${args[1]}`;
+    const option = args.shift();
+    if (valueOptions.has(option)) args.shift();
+  }
+  if (/^(?:npm|pnpm|yarn|bun)$/.test(name)) {
+    const first = args.shift();
+    const action = first === "run-script" ? "run" : first;
+    while (args[0]?.startsWith("-")) {
+      const option = args.shift();
+      if (valueOptions.has(option)) args.shift();
+    }
+    if (action === "run" && /^[\w.-][\w:.-]*$/.test(args[0] || "")) return `${name} run ${args[0].split(":")[0]}`.slice(0, 64);
+    if (["exec", "dlx", "x"].includes(action) && /^[\w.-]+$/.test(args[0] || "")) return `${name} ${action} ${args[0]}`.slice(0, 64);
+    if (/^[\w:.-]+$/.test(action || "")) return `${name} ${action.split(":")[0]}`;
+    return name;
+  }
+  if (/^(?:git|docker|podman|cargo|go|dotnet|make|gradle|mvn|kubectl|helm|uv|npx|bunx)$/.test(name)
+    && /^[\w-]+$/.test(args[0] || "")) {
+    const prefix = [name, args[0]];
+    const nested = { git: ["remote", "worktree", "submodule", "stash"], docker: ["compose", "container", "image", "volume", "network", "buildx"],
+      podman: ["compose", "container", "image", "volume", "network"], go: ["mod", "work"], kubectl: ["config", "rollout"], uv: ["run", "tool"], npx: [args[0]], bunx: [args[0]] };
+    if (nested[name]?.includes(args[0]) && /^[\w.-]+$/.test(args[1] || "")) prefix.push(args[1]);
+    return prefix.join(" ").slice(0, 64);
+  }
+  const label = [name, ...words.slice(1)].join(" ");
+  if (shortCommandText(label) && !/(?:^|\s)(?:-H|--header|-u|--user|--password|--token)(?:\s|=)/.test(label)) return label;
+  return name;
+}
+
+function shortCommandText(value) {
+  if (typeof value !== "string" || value.length > 8192) return "";
+  const text = value.replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "").replace(/[\x00-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim();
+  const width = Array.from(text).reduce((total, char) => total + (char.codePointAt(0) > 255 ? 2 : 1), 0);
+  if (width > 18 || /(?:authorization|password|token|secret|api[_-]?key|cookie)\s*[:=]|\b(?:sk-|ghp_|github_pat_|AKIA)/i.test(text)) return "";
+  return text;
+}
+
+function commandOutputSummary(value, status) {
+  if (typeof value !== "string") return "";
+  const text = value.slice(-8192).replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "")
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
+  const lines = text.split(/[\r\n]+/).map(line => line.trim().replace(/^[ℹ#]\s*/, "").replace(/^=+\s*|\s*=+$/g, "").trim());
+  for (const line of lines.toReversed()) {
+    const nodeCount = line.match(/^(pass|fail)\s+(\d+)$/i);
+    if (nodeCount) {
+      if (nodeCount[1].toLowerCase() === "fail" && /^0+$/.test(nodeCount[2])) continue;
+      if (nodeCount[1].toLowerCase() === "pass" && status === "failure") return "";
+      return shortCommandText(`${nodeCount[2]} ${nodeCount[1].toLowerCase() === "fail" ? "failed" : "passed"}`);
+    }
+    const summary = line.match(/^(?:Tests?:?\s+)(.*)$/i)?.[1]
+      || line.match(/^(\d+\s+(?:passed|failed|skipped|xfailed|xpassed|errors?|warnings?|deselected|passing|failing)\b.*)$/i)?.[1];
+    if (!summary) continue;
+    const counts = [...summary.matchAll(/\b(\d+)\s+(passed|failed|skipped|xfailed|xpassed|errors?|warnings?|deselected|passing|failing)\b/gi)]
+      .map(match => ({ count: match[1], kind: match[2].toLowerCase().replace("passing", "passed").replace("failing", "failed") }))
+      .filter(item => !/^0+$/.test(item.count) || item.kind === "passed");
+    counts.sort((a, b) => Number(/^(?:failed|errors?)$/.test(b.kind)) - Number(/^(?:failed|errors?)$/.test(a.kind)));
+    if (!counts.length) continue;
+    if (status === "failure" && !/^(?:failed|errors?)$/.test(counts[0].kind)) return "";
+    const parts = counts.map(item => `${item.count} ${item.kind}`);
+    return shortCommandText(parts.join(", ")) || shortCommandText(parts[0]);
+  }
+  return lines.filter(Boolean).length <= 1 ? shortCommandText(text) : "";
+}
+
+function commandSessionId(value) {
+  const text = typeof value === "number" || typeof value === "string" ? String(value) : "";
+  return /^[A-Za-z0-9_-]{1,100}$/.test(text) ? text : "";
+}
+
+function normalizeCommandPreview(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rawLabel = typeof value.label === "string" ? value.label.trim() : "";
+  const sessionId = commandSessionId(value.sessionId);
+  if ((!rawLabel && !sessionId) || rawLabel.length > 64 || /[\x00-\x1f\x7f]/.test(rawLabel)) return null;
+  const label = rawLabel ? commandLabelFromInput({ cmd: rawLabel }) || rawLabel : "";
+  if (!["running", "success", "failure", "finished"].includes(value.status)) return null;
+  return {
+    label,
+    status: value.status,
+    output: commandOutputSummary(value.output, value.status),
+    callId: typeof value.callId === "string" ? value.callId.slice(0, 200) : "",
+    ...(sessionId ? { sessionId } : {}),
+  };
+}
+
+function buildCommandPreview(input, event, response, options = {}) {
+  if (typeof input === "string") {
+    try { input = JSON.parse(input); } catch { return null; }
+  }
+  const label = commandLabelFromInput(input);
+  if (!label && !commandSessionId(input?.session_id)) return null;
+  let result = response;
+  if (typeof result === "string") {
+    try { result = JSON.parse(result); } catch { /* Plain terminal output. */ }
+  }
+  const wrapperFailure = result?.is_error === true || result?.isError === true || result?.success === false
+    || Boolean(result?.error) || result?.interrupted === true;
+  if (Array.isArray(result?.content) && result.content.length === 1 && typeof result.content[0]?.text === "string") {
+    try { result = JSON.parse(result.content[0].text); } catch { /* Text content is collected below. */ }
+  }
+  let text = typeof result === "string" ? result : [result?.stdout, result?.stderr, result?.output, result?.aggregated_output, result?.text,
+    ...(Array.isArray(result?.content) ? result.content.map(item => item?.text) : [])]
+    .filter(value => typeof value === "string").join("\n");
+  text = text.slice(-8192);
+  const sessionId = commandSessionId(result?.session_id ?? input?.session_id);
+  const rawCode = result?.exit_code ?? result?.exitCode ?? result?.metadata?.exit_code ?? result?.metadata?.exitCode
+    ?? text.match(/(?:Process exited with code|Exit code:)\s*(-?\d+)/i)?.[1];
+  const exitCode = (typeof rawCode === "number" || (typeof rawCode === "string" && /^-?\d+$/.test(rawCode))) ? Number(rawCode) : null;
+  const failed = event === "PostToolUseFailure" || wrapperFailure || result?.is_error === true || result?.isError === true
+    || result?.success === false || Boolean(result?.error) || result?.interrupted === true || (exitCode !== null && exitCode !== 0);
+  const running = /^(?:PreToolUse|BeforeTool)$/.test(event)
+    || (exitCode === null && (commandSessionId(result?.session_id) || /Process running with session ID/i.test(text)));
+  let status = "finished";
+  if (failed) status = "failure";
+  else if (running) status = "running";
+  else if (exitCode === 0 || (event === "PostToolUse" && typeof result?.stdout === "string")) status = "success";
+  const finalOutput = text.match(/(?:Final output:|Output:)\s*\n([\s\S]*)$/i);
+  if (finalOutput) text = finalOutput[1];
+  else if (/Process exited with code|Process running with session ID/i.test(text)) text = "";
+  return normalizeCommandPreview({ label, status, output: commandOutputSummary(text, status), callId: options.callId || "", sessionId });
+}
+
 function normalizePosixProcessName(comm) {
   return path.posix.basename(String(comm || "")).toLowerCase();
 }
@@ -1202,6 +1367,11 @@ function buildElectronLaunchConfig(projectDir, options = {}) {
 }
 
 module.exports = {
+  commandNameFromInput,
+  commandLabelFromInput,
+  shortCommandText,
+  normalizeCommandPreview,
+  buildCommandPreview,
   getPlatformConfig,
   createPidResolver,
   DEFAULT_AGENT_CMDLINE_NAMES,

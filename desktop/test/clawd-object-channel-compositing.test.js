@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -734,7 +735,7 @@ test("formatNote always shows selector, reason, and hint", () => {
 // clean, and R6 keeps the sampling declarations in sync with that list.
 // ---------------------------------------------------------------------------
 
-test("every Clawd OBJECT-channel asset is compositor-safe", () => {
+upstreamArtworkTest("every Clawd OBJECT-channel asset is compositor-safe", () => {
   const theme = JSON.parse(readMarkup(THEME_PATH));
   const files = theme.rendering && Array.isArray(theme.rendering.objectChannelFiles)
     ? theme.rendering.objectChannelFiles
@@ -795,7 +796,7 @@ test("R6 keeps objectChannelFiles, discreteSampling, and assets/svg consistent",
   );
 });
 
-test("display scale compositor: sampled Clawd SVGs have a viewBox and no root stylesheet selectors", () => {
+upstreamArtworkTest("display scale compositor: sampled Clawd SVGs have a viewBox and no root stylesheet selectors", () => {
   const theme = JSON.parse(readMarkup(THEME_PATH));
   const files = Object.keys(theme.rendering.discreteSampling);
   assert.ok(files.length > 0, "Clawd must declare sampled SVGs");

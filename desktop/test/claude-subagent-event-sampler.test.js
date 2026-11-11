@@ -1,4 +1,6 @@
 "use strict";
+const { skipUpstreamFile } = require("./helpers/upstream-artifacts");
+if (skipUpstreamFile('upstream manual Claude event sampler', 'Manual upstream sampling tool is excluded from Plus')) return;
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");

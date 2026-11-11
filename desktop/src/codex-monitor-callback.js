@@ -1,5 +1,6 @@
 "use strict";
 
+const { normalizeCommandPreview } = require("../hooks/shared-process");
 const { normalizePlanProgress } = require("../hooks/codex-plan-progress");
 const { normalizeCodexTurnId } = require("./codex-turn-id");
 
@@ -8,6 +9,8 @@ const { CODEX_QUOTA_FIELDS } = require("../hooks/codex-rate-limits");
 
 function isCodexMonitorMetadataOnlyEvent(event, extra) {
   if (event === "session_index:title") return true;
+  if ((event === "response_item:function_call_output" || event === "event_msg:exec_command_end")
+    && normalizeCommandPreview(extra && extra.commandPreview)) return true;
   return event === "event_msg:token_count"
     && !!(extra && typeof extra === "object"
       && (extra.contextUsage || extra.codexQuota || extra.codexSparkQuota
@@ -48,6 +51,10 @@ function buildCodexMonitorSessionOptions(extra, options = {}) {
   if (Object.prototype.hasOwnProperty.call(input, "codexOriginator")) out.codexOriginator = input.codexOriginator;
   if (Object.prototype.hasOwnProperty.call(input, "codexSource")) out.codexSource = input.codexSource;
   if (Object.prototype.hasOwnProperty.call(input, "turnId")) out.turnId = input.turnId;
+  const commandPreview = normalizeCommandPreview(input.commandPreview);
+  if (commandPreview) out.commandPreview = commandPreview;
+  if (Object.prototype.hasOwnProperty.call(input, "commandName")) out.commandName = input.commandName;
+  if (Object.prototype.hasOwnProperty.call(input, "toolName")) out.toolName = input.toolName;
   if (options.includeRecap === true) {
     const hasTrustedRecapTime = Number.isSafeInteger(input.recapOccurredAt) && input.recapOccurredAt >= 0;
     if (hasTrustedRecapTime) out.recapOccurredAt = input.recapOccurredAt;

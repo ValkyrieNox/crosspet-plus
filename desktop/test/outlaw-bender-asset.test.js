@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -25,7 +26,7 @@ function readLf(file) {
   return `${fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n").trimEnd()}\n`;
 }
 
-test("builtin outlaw bender preserves the reviewed art with only the declared compositing deltas", () => {
+upstreamArtworkTest("builtin outlaw bender preserves the reviewed art with only the declared compositing deltas", () => {
   const source = readLf(SOURCE);
   const deltas = [
     ['viewBox="-15 -25 45 45"', 'viewBox="-15 -25 45 46"'],
@@ -55,7 +56,7 @@ test("builtin outlaw bender preserves the reviewed art with only the declared co
   assert.strictEqual(readLf(RUNTIME), expectedRuntime);
 });
 
-test("builtin outlaw bender has no active, linked, or externally loaded SVG content", () => {
+upstreamArtworkTest("builtin outlaw bender has no active, linked, or externally loaded SVG content", () => {
   const markup = readLf(RUNTIME);
   assert.match(markup, /<style\b/i, "local CSS keyframes are intentionally retained");
   for (const pattern of FORBIDDEN) {
@@ -63,7 +64,7 @@ test("builtin outlaw bender has no active, linked, or externally loaded SVG cont
   }
 });
 
-test("the generated full outlaw theme is not shipped", () => {
+upstreamArtworkTest("the generated full outlaw theme is not shipped", () => {
   const themeDir = path.join(ROOT, "themes", "clawd-outlaw");
   assert.strictEqual(fs.existsSync(path.join(themeDir, "theme.json")), false);
   const assetsDir = path.join(themeDir, "assets");

@@ -195,6 +195,30 @@ describe("internally derived execution hint", () => {
 });
 
 describe("Codex official plan progress", () => {
+  it("forwards bounded command results as owned metadata without a lifecycle event", async () => {
+    const preview = { label: "npm run build", status: "success", output: "Built", callId: "a" };
+    const updates = [];
+    const result = await callStatePost(JSON.stringify({
+      state: "working", event: "response_item:function_call_output", agent_id: "codex", session_id: "command-result",
+      metadata_only: true, command_preview: preview,
+    }), { ctx: { updateSessionMetadata: (...args) => { updates.push(args); return true; } } });
+    assert.equal(result.calls.updateSession.length, 0);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0][1].expectedAgentId, "codex");
+    assert.deepEqual(updates[0][1].commandPreview, preview);
+  });
+  it("passes a command label from the hook to the state store", async () => {
+    const result = await callStatePost(JSON.stringify({
+      state: "working", event: "PreToolUse", agent_id: "codex", session_id: "command-label",
+      tool_name: "exec_command", command_name: "ssh",
+    }));
+    assert.equal(result.calls.updateSession[0][3].commandName, "ssh");
+    const invalid = await callStatePost(JSON.stringify({
+      state: "working", event: "PreToolUse", agent_id: "codex", session_id: "command-label",
+      tool_name: "exec_command", command_name: "ssh secret@host",
+    }));
+    assert.equal(invalid.calls.updateSession[0][3].commandName, "");
+  });
   const raw = "codex:official-plan";
   const body = (extra = {}) => JSON.stringify({
     state: "working", event: "PostToolUse", agent_id: "codex", hook_source: "codex-official",

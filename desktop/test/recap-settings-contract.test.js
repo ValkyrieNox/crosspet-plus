@@ -45,7 +45,12 @@ test("main owns recap runtime lifecycle and wires it to state and Settings IPC",
   assert.match(source, /const recapRuntime = createRecapRuntime\(/);
   assert.match(source, /recapSink: recapRuntime/);
   assert.match(source, /registerSettingsIpc\(\{[\s\S]*?settingsController: _settingsController,\s*recapRuntime,/);
-  assert.match(source, /createWindow\(\);\s*try \{ recapRuntime\.start\(\); \}/);
+  const startup = source.slice(source.indexOf("app.whenReady().then(async () => {"), source.indexOf('app.on("before-quit", (event) => {'));
+  const createWindowAt = startup.indexOf("createWindow();");
+  const startRecapAt = startup.indexOf("try { recapRuntime.start(); }");
+  assert.ok(createWindowAt >= 0, "the ready lifecycle creates the pet window");
+  assert.ok(startRecapAt > createWindowAt, "recap starts after the pet window is created");
+  assert.match(startup.slice(startRecapAt), /try \{ recapRuntime\.start\(\); \}\s*catch \(err\) \{ console\.warn\("Clawd: local recap startup failed:"/);
   assert.match(source, /try \{ recapRuntime\.dispose\(\); \} catch \{}\s*_state\.cleanup\(\);/);
   assert.match(source, /getEnabled: \(\) => !_recapStartupAuthorityLost/);
   assert.match(source, /onRecorded: \(\) => settingsWindowRuntime\.notifyRecapChanged\(\)/);

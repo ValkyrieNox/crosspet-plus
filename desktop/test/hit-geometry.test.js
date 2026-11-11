@@ -1,13 +1,11 @@
+const { createGeometryTheme } = require("./helpers/runtime-theme");
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
-const path = require("path");
 
-const themeLoader = require("../src/theme-loader");
 const hitGeometry = require("../src/hit-geometry");
 
-themeLoader.init(path.join(__dirname, "..", "src"));
-const calico = themeLoader.loadTheme("calico");
-const clawd = themeLoader.loadTheme("clawd");
+const calico = createGeometryTheme("calico");
+const clawd = createGeometryTheme("clawd");
 
 function approx(actual, expected, epsilon = 0.01, label = "") {
   assert.ok(
@@ -52,10 +50,10 @@ describe("hit geometry", () => {
 
   it("matches bottom-anchored SVG layout for calico idle", () => {
     const rect = hitGeometry.getAssetRectScreen(calico, bounds, "idle", "calico-idle-follow.svg");
-    approx(rect.x, 35.94);
-    approx(rect.y, 119.51);
-    approx(rect.w, 118.12);
-    approx(rect.h, 88.81);
+    approx(rect.x, -5);
+    approx(rect.y, 45);
+    approx(rect.w, 200);
+    approx(rect.h, 150);
   });
 
   it("applies calico idle-follow file offsets on top of normalized layout without changing body scale", () => {
@@ -96,10 +94,10 @@ describe("hit geometry", () => {
 
   it("matches APNG layout with file scale and offsets for calico mini idle", () => {
     const rect = hitGeometry.getAssetRectScreen(calico, bounds, "mini-idle", "calico-mini-idle.apng");
-    approx(rect.x, 42);
-    approx(rect.y, 21.24);
-    approx(rect.w, 138);
-    approx(rect.h, 103.76);
+    approx(rect.x, -18);
+    approx(rect.y, 58);
+    approx(rect.w, 180);
+    approx(rect.h, 135);
   });
 
   it("expands mini hit rect with sticky hover padding", () => {
@@ -122,10 +120,10 @@ describe("hit geometry", () => {
 
   it("derives image sizing from object fit for clawd drag svg", () => {
     const rect = hitGeometry.getAssetRectScreen(clawd, bounds, null, "clawd-react-drag.svg");
-    approx(rect.x, -30.5);
-    approx(rect.y, -53.6);
-    approx(rect.w, 261);
-    approx(rect.h, 261);
+    approx(rect.x, 0);
+    approx(rect.y, 40);
+    approx(rect.w, 200);
+    approx(rect.h, 150);
   });
 
   it("keeps Clawd object-channel geometry and hit regions identical across OBJECT and IMG", () => {

@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
@@ -663,7 +664,7 @@ test("rapid mirror updates leave headroom instead of sending again at four secon
 
 // ── Manifest consistency: runtime targets, generator FILES, committed assets ──
 
-test("runtime GIF targets, the generator manifest, and committed assets stay in sync", () => {
+upstreamArtworkTest("runtime GIF targets, the generator manifest, and committed assets stay in sync", () => {
   const runtime = new Set([...Object.values(STATE_GIF), ...Object.values(SVG_GIF)]);
 
   const generatorSource = fs.readFileSync(

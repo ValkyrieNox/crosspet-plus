@@ -78,7 +78,7 @@ function unwrapExpression(value) {
     .trim();
 }
 
-test("CI test report: workflow uploads the TAP report only on failure", () => {
+test("CI test report: workflow uploads the TAP report only on failure", { skip: "Upstream-only full-suite TAP upload workflow is not part of Plus native CI" }, () => {
   const workflow = yaml.load(fs.readFileSync(path.join(ROOT, ".github", "workflows", "test.yml"), "utf8"));
   const steps = workflow.jobs.test.steps;
 

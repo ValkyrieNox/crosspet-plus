@@ -16,8 +16,11 @@
 """
 import hashlib
 import json
+import math
 import os
 import re
+import shlex
+import unicodedata
 import sys
 import time
 from pathlib import Path
@@ -701,6 +704,236 @@ if character in MULTI_MODEL_HOSTS:
             pass
 
 call = event.get("toolCall") if isinstance(event.get("toolCall"), dict) else {}  # Antigravity
+def display_columns(text: str) -> int:
+    return sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in text)
+
+
+def sensitive_text(text: str) -> bool:
+    return bool(re.search(r"secret|token|password|passwd|authorization|api[_-]?key|private[_-]?key|bearer|(?:^|\s)-[Hu](?:\s|$)", text, re.I))
+
+
+def command_words(value):
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return []
+    if not isinstance(value, dict):
+        return []
+    command = value.get("command", value.get("cmd", value.get("CommandLine", "")))
+    if isinstance(command, list):
+        command = shlex.join(str(part) for part in command)
+    if not isinstance(command, str):
+        return []
+    # Operators inside quoted arguments belong to that argument. Shell expansion is never evaluated.
+    quote, escaped, segment = "", False, []
+    token_start = 0
+    for c in command[:8192]:
+        if escaped:
+            segment.append(c)
+            escaped = False
+        elif c == "\\" and quote != "'":
+            segment.append(c)
+            escaped = True
+        elif c in ("'", '"'):
+            segment.append(c)
+            if not quote:
+                quote = c
+            elif quote == c:
+                quote = ""
+        elif not quote and c in ";&|<>\n\r":
+            if c in "<>" and re.fullmatch(r"[0-9]+", "".join(segment[token_start:])):
+                del segment[token_start:]
+            break
+        else:
+            segment.append(c)
+            if not quote and c.isspace():
+                token_start = len(segment)
+    try:
+        words = shlex.split("".join(segment))
+    except ValueError:
+        return []
+    while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+        words.pop(0)
+    if words:
+        words[0] = re.split(r"[\\/]", words[0])[-1]
+    return words
+
+
+def command_name_from_input(value) -> str:
+    words = command_words(value)
+    name = words[0] if words else ""
+    return name if re.fullmatch(r"[\w.+-]{1,64}", name) else ""
+
+
+def command_label_from_input(value) -> str:
+    words = command_words(value)
+    command = command_name_from_input(value)
+    if not command:
+        return ""
+    args = words[1:]
+    value_options = {"--prefix", "--workspace", "-w", "--cwd", "--dir", "-C", "--context", "--project-directory",
+                     "--token", "--password", "--user", "--username", "--registry", "--cache", "--filter", "--config", "--userconfig", "--globalconfig", "--store-dir", "-F"}
+    while args and args[0].startswith("-"):
+        if re.fullmatch(r"python(?:3(?:\.\d+)?)?", command) and args[0] == "-m" and len(args) > 1 and re.fullmatch(r"[\w.-]+", args[1]):
+            return f"{command} -m {args[1]}"
+        option = args.pop(0)
+        if option in value_options and args:
+            args.pop(0)
+    if command in ("npm", "pnpm", "yarn", "bun"):
+        action = args.pop(0) if args else ""
+        if action == "run-script":
+            action = "run"
+        while args and args[0].startswith("-"):
+            option = args.pop(0)
+            if option in value_options and args:
+                args.pop(0)
+        if action == "run" and args and re.fullmatch(r"[\w.-][\w:.-]*", args[0]):
+            return f"{command} run {args[0].split(':')[0]}"[:64]
+        if action in ("exec", "dlx", "x") and args and re.fullmatch(r"[\w.-]+", args[0]):
+            return f"{command} {action} {args[0]}"[:64]
+        return f"{command} {action.split(':')[0]}" if re.fullmatch(r"[\w:.-]+", action) else command
+    if command in ("git", "docker", "podman", "cargo", "go", "dotnet", "make", "gradle", "mvn", "kubectl", "helm", "uv", "npx", "bunx") and args and re.fullmatch(r"[\w-]+", args[0]):
+        prefix = [command, args[0]]
+        nested = {"git": ("remote", "worktree", "submodule", "stash"), "docker": ("compose", "container", "image", "volume", "network", "buildx"),
+                  "podman": ("compose", "container", "image", "volume", "network"), "go": ("mod", "work"), "kubectl": ("config", "rollout"),
+                  "uv": ("run", "tool"), "npx": (args[0],), "bunx": (args[0],)}
+        if args[0] in nested.get(command, ()) and len(args) > 1 and re.fullmatch(r"[\w.-]+", args[1]):
+            prefix.append(args[1])
+        return " ".join(prefix)[:64]
+    label = " ".join(words)
+    if display_columns(label) <= 18 and not sensitive_text(label):
+        return label
+    return command if display_columns(command) <= 18 else ""
+
+
+def response_details():
+    response = event.get("tool_response", event.get("toolResponse", event.get("result", {})))
+    for _ in range(3):
+        if isinstance(response, str):
+            try:
+                response = json.loads(response)
+                continue
+            except (ValueError, TypeError):
+                return {}, response
+        if not isinstance(response, dict):
+            return {}, ""
+        content = response.get("content")
+        if isinstance(content, list) and len(content) == 1 and isinstance(content[0], dict):
+            try:
+                nested = json.loads(content[0].get("text", ""))
+            except (ValueError, TypeError):
+                nested = None
+            if isinstance(nested, dict):
+                wrapper_failed = (response.get("isError") is True or response.get("is_error") is True
+                                  or response.get("success") is False or bool(response.get("error"))
+                                  or response.get("interrupted") is True)
+                response = {**response, **nested}
+                if wrapper_failed:
+                    response["isError"] = True
+                response.pop("content", None)
+                continue
+        break
+    if not isinstance(response, dict):
+        return {}, response if isinstance(response, str) else ""
+    parts = []
+    for key in ("stdout", "stderr", "output", "content"):
+        value = response.get(key)
+        if isinstance(value, str) and value:
+            parts.append(value)
+        elif isinstance(value, list):
+            parts.extend(item.get("text", "") for item in value if isinstance(item, dict) and isinstance(item.get("text"), str))
+    return response, "\n".join(parts)
+
+
+def command_output_summary(text: str, status: str) -> str:
+    lines = [re.sub(r"^=+\s*|\s*=+$", "", re.sub(r"^[ℹ#]\s*", "", line.strip())).strip()
+             for line in text[-8192:].splitlines()]
+
+    def short(value):
+        return value if display_columns(value) <= 18 and not sensitive_text(value) else ""
+
+    for line in reversed(lines):
+        node_count = re.fullmatch(r"(pass|fail)\s+(\d+)", line, re.I)
+        if node_count:
+            kind, count = node_count.group(1).lower(), node_count.group(2)
+            if kind == "fail" and not count.strip("0"):
+                continue
+            if kind == "pass" and status == "failure":
+                return ""
+            return short(f"{count} {'failed' if kind == 'fail' else 'passed'}")
+        summary = re.match(r"^Tests?:?\s+(.*)$", line, re.I) or re.match(
+            r"^(\d+\s+(?:passed|failed|skipped|xfailed|xpassed|errors?|warnings?|deselected|passing|failing)\b.*)$", line, re.I)
+        if not summary:
+            continue
+        counts = [(count, kind.lower().replace("passing", "passed").replace("failing", "failed"))
+                  for count, kind in re.findall(r"\b(\d+)\s+(passed|failed|skipped|xfailed|xpassed|errors?|warnings?|deselected|passing|failing)\b", summary.group(1), re.I)]
+        counts = [(count, kind) for count, kind in counts if count.strip("0") or kind == "passed"]
+        counts.sort(key=lambda item: item[1] not in ("failed", "error", "errors"))
+        if not counts:
+            continue
+        if status == "failure" and counts[0][1] not in ("failed", "error", "errors"):
+            return ""
+        parts = [f"{count} {kind}" for count, kind in counts]
+        return short(", ".join(parts)) or short(parts[0])
+    return short(text.strip()) if len([line for line in lines if line]) <= 1 else ""
+
+
+def terminal_session_id(value) -> str:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return ""
+    if not isinstance(value, dict):
+        return ""
+    session = value.get("session_id")
+    if isinstance(session, bool):
+        return ""
+    if isinstance(session, float):
+        if not math.isfinite(session):
+            return ""
+        session = int(session) if session.is_integer() else session
+    if isinstance(session, (int, float)):
+        return str(session) if len(str(session)) <= 128 else ""
+    if isinstance(session, str) and 0 < len(session.strip()) <= 128:
+        return session.strip()
+    return ""
+
+
+def preview_result(original_event: str):
+    response, output = response_details()
+    output = re.sub(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))", "", output)
+    output = "".join(c for c in output if c in "\n\r\t" or unicodedata.category(c)[0] != "C").strip()
+    metadata = response.get("metadata") if isinstance(response.get("metadata"), dict) else {}
+    exit_code = response.get("exit_code", response.get("exitCode", metadata.get("exit_code", metadata.get("exitCode", event.get("exit_code", event.get("exitCode"))))))
+    envelope_exit = re.search(r"Process exited with code\s+(-?\d+)", output)
+    if exit_code is None and envelope_exit:
+        exit_code = envelope_exit.group(1)
+    pending = exit_code is None and (response.get("session_id") is not None or bool(re.search(r"Process running with session ID", output)))
+    final_output = re.search(r"(?:^|\n)Final output:\s*\n?", output)
+    if final_output:
+        output = output[final_output.end():].strip()
+    elif envelope_exit or pending:
+        output = ""
+    failed = original_event in ("PostToolUseFailure", "StopFailure", "Interrupt", "StopCancelled") or bool(event.get("error"))
+    failed = failed or response.get("is_error") is True or response.get("isError") is True or response.get("success") is False or bool(response.get("error"))
+    failed = failed or response.get("interrupted") is True or event.get("interrupted") is True
+    if exit_code is not None:
+        failed = failed or str(exit_code) != "0"
+    if original_event in ("PreToolUse", "BeforeTool"):
+        return "running", ""
+    if failed:
+        status = "failure"
+    elif pending:
+        status = "running"
+    elif exit_code is not None or response.get("success") is True or isinstance(response.get("stdout"), str):
+        status = "success"
+    else:
+        status = "finished"
+    return status, command_output_summary(output, status)
+
+
 tool = str(event.get("tool_name") or call.get("name", "")).lower()
 tool_input = json.dumps(event.get("tool_input") or call.get("args", ""), ensure_ascii=False).lower()
 
@@ -755,9 +988,9 @@ def pose_for_tool(t: str) -> str:
 def tool_failed() -> bool:
     if event.get("error"):  # Antigravity
         return True
-    resp = event.get("tool_response")
+    resp, _ = response_details()
     if isinstance(resp, dict):
-        if resp.get("is_error") is True or resp.get("success") is False:
+        if preview_result(name)[0] == "failure":
             return True
         if resp.get("error"):
             return True
@@ -799,6 +1032,7 @@ def set_turn_tools(n: int) -> None:
 
 state_dir.mkdir(parents=True, exist_ok=True)
 
+original_event = name
 pose = None
 if arg_event and name == "PostToolUse":
     # Antigravity：不挂 PreToolUse（它要求钩子回答「放行 / 拦截」，会干扰正常的权限确认），
@@ -870,22 +1104,60 @@ elif name in ("SessionEnd",):
 # 客户端名要拼进文件名：只认小写字母、数字和连字符，别的（理论上不会有）不写这份，免得拼出奇怪路径
 client_state = state_dir / f"{character}@{client}-state.json" if re.fullmatch(r"[a-z0-9-]+", client) else None
 
+command_input = event.get("tool_input") or call.get("args")
+command_name = command_name_from_input(command_input)
+call_id = str(event.get("tool_use_id") or event.get("tool_call_id") or event.get("toolCallId") or call.get("id") or "")[:128]
+label = command_label_from_input(command_input)
+status, output = preview_result(original_event)
+response, _ = response_details()
+input_session = terminal_session_id(command_input)
+result_session = terminal_session_id(response)
+polling = tool.endswith("write_stdin") and bool(input_session or result_session)
 state = {"pose": pose, "event": name, "tool": tool, "ts": time.time(),
-         "host": source_host, "session": turn_sid, "turn": effective_turn}
-if pose == "thinking" and name in ("PreInvocation", "PostToolUse", "AfterTool"):
-    # 快的工具（ls、读文件、grep）从开始到结束常常不到 0.3 秒，桌宠每 0.3 秒才读一次，
-    # 刚写的工具动作会被「回去思考」直接盖掉（Antigravity 甚至几毫秒内就开始下一轮思考）。
-    # 所以把它捎带上：桌宠先演完那个动作再进入思考；已经演过的（同一个 afterTs）桌宠会跳过。
-    # 按客户端那份读上一条：Claude 桌面和终端同时干活时，主文件里可能是另一边刚写的工具动作。
-    # 还没有这份（刚升级、第一次写）就退回读主文件，host / session / turn 的比对照样把别人的挡掉
-    try:
-        prev_path = client_state if client_state and client_state.exists() else state_dir / f"{character}-state.json"
-        prev = json.loads(prev_path.read_text())
-        if (prev.get("event") == "PreToolUse" and time.time() - float(prev.get("ts", 0)) < 3
-                and (prev.get("host"), prev.get("session"), prev.get("turn")) == (source_host, turn_sid, effective_turn)):
-            state.update(after=prev.get("pose"), afterTs=prev.get("ts"), tool=prev.get("tool", ""))
-    except Exception:
-        pass
+         "host": source_host, "session": turn_sid, "turn": effective_turn,
+         "commandName": command_name,
+         "commandPreview": {"label": label, "status": status, "output": output, "callId": call_id} if label else None}
+prev = {}
+same_context = False
+try:
+    prev_path = client_state if client_state and client_state.exists() else state_dir / f"{character}-state.json"
+    prev = json.loads(prev_path.read_text())
+    same_context = (prev.get("host"), prev.get("session"), prev.get("turn")) == (source_host, turn_sid, effective_turn)
+    previous_preview = prev.get("commandPreview")
+    previous_call = previous_preview.get("callId", "") if isinstance(previous_preview, dict) else ""
+    same_call = call_id == previous_call
+    same_terminal = (polling and (input_session or result_session) == previous_preview.get("sessionId", "")
+                     and (not input_session or not result_session or input_session == result_session)) if isinstance(previous_preview, dict) else False
+    correlated_call = same_terminal if polling else same_call
+    post_tool = original_event in ("PostToolUse", "AfterTool", "PostToolUseFailure")
+    end_event = original_event in ("Interrupt", "StopCancelled", "Stop", "AfterAgent", "StopFailure")
+    if same_context and isinstance(previous_preview, dict) and ((post_tool and correlated_call) or (original_event in ("PreToolUse", "BeforeTool") and same_terminal) or end_event or original_event == "PreInvocation"):
+        if not label:
+            state["commandName"] = prev.get("commandName", "")
+            state["commandPreview"] = dict(previous_preview)
+            if post_tool or (original_event in ("PreToolUse", "BeforeTool") and same_terminal) or (end_event and (previous_preview.get("status") == "running" or status == "failure")):
+                state["commandPreview"].update(status=status, output=output, callId=call_id or previous_call)
+    terminal_tool = tool.rsplit("__", 1)[-1] in ("bash", "shell", "exec_command", "write_stdin", "run_command", "shell_exec", "execute_command", "command_status", "send_command_input", "read_terminal")
+    unrelated_tool = (bool(tool) and not terminal_tool and not command_words(command_input)
+                      and original_event in ("PreToolUse", "BeforeTool", "PostToolUse", "AfterTool", "PostToolUseFailure"))
+    if (same_context and isinstance(previous_preview, dict) and not state.get("commandPreview")
+            and unrelated_tool):
+        state["commandName"] = prev.get("commandName", "")
+        state["commandPreview"] = dict(previous_preview)
+    # Preserve the short tool animation together with the current result preview.
+    if (pose == "thinking" and name in ("PreInvocation", "PostToolUse", "AfterTool")
+            and prev.get("event") == "PreToolUse" and time.time() - float(prev.get("ts", 0)) < 3
+            and same_context and (not post_tool or correlated_call)):
+        state.update(after=prev.get("pose"), afterTs=prev.get("ts"), tool=prev.get("tool", ""))
+except Exception:
+    pass
+if state.get("commandPreview") and (result_session or input_session):
+    state["commandPreview"]["sessionId"] = result_session or input_session
+
+if state.get("commandPreview"):
+    unchanged_preview = same_context and state["commandPreview"] == prev.get("commandPreview")
+    state["commandPreviewAt"] = (prev.get("commandPreviewAt", prev.get("ts", state["ts"]))
+                                 if unchanged_preview else state["ts"])
 
 if name == "SessionStart" and str(event.get("source", "")).lower() in ("compact", "resume"):
     # 压缩 / 恢复不是新的一轮。丢掉它，免得把正在做的动作盖成待机。
@@ -965,7 +1237,8 @@ if session_id and (pose or name == "SessionEnd"):
     try:
         update_sessions(session_id, None if name == "SessionEnd" else
                         {"pose": state.get("after") or pose if pose == "thinking" else pose, "event": name, "ts": time.time(),
-                         "client": client})
+                         "client": client, "commandName": state.get("commandName", ""),
+                         "commandPreview": state.get("commandPreview"), "commandPreviewAt": state.get("commandPreviewAt")})
     except Exception:
         pass
 

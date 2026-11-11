@@ -516,7 +516,7 @@ describe("Claude AppImage hook registration", () => {
       !foreignCalls.some((call) => call.command === "/opt/VSCodium.AppImage"),
       JSON.stringify(foreignCalls)
     );
-    assert.strictEqual(foreignCalls[0].command, "/opt/Clawd/clawd-on-desk");
+    assert.strictEqual(foreignCalls[0].command, "/opt/Clawd/crosspet-plus");
 
     // The same inherited env is trusted only when APPDIR owns this process's
     // own asar tree (a real, not-yet-materialized Clawd AppImage).

@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -305,7 +306,7 @@ function addCachedDeb(harness, name = "cached.deb") {
   fs.writeFileSync(path.join(harness.cacheDir, name), "");
 }
 
-test("Wayland workflows parse and share one apt cache key and path", () => {
+upstreamRepositoryTest("Wayland workflows parse and share one apt cache key and path", () => {
   const smokeText = fs.readFileSync(SMOKE_WORKFLOW, "utf8");
   const cacheText = fs.readFileSync(CACHE_WORKFLOW, "utf8");
   const smoke = yaml.load(smokeText);
@@ -319,7 +320,7 @@ test("Wayland workflows parse and share one apt cache key and path", () => {
   assert.equal(countOccurrences(cacheText, `path: ${CACHE_PATH}`), 2);
 });
 
-test("Wayland smoke jobs restore the cache and install from the script", () => {
+upstreamRepositoryTest("Wayland smoke jobs restore the cache and install from the script", () => {
   const smoke = yaml.load(fs.readFileSync(SMOKE_WORKFLOW, "utf8"));
   const jobNames = ["xwayland-smoke", "native-wayland-contract", "appimage-claude-hooks"];
 
@@ -338,7 +339,7 @@ test("Wayland smoke jobs restore the cache and install from the script", () => {
   }
 });
 
-test("Wayland cache warm-up only saves after a successful publish", () => {
+upstreamRepositoryTest("Wayland cache warm-up only saves after a successful publish", () => {
   const cache = yaml.load(fs.readFileSync(CACHE_WORKFLOW, "utf8"));
   const workflow = fs.readFileSync(CACHE_WORKFLOW, "utf8");
   const steps = cache.jobs["warm-cache"].steps;
@@ -359,7 +360,7 @@ test("Wayland cache warm-up only saves after a successful publish", () => {
   assert.match(workflow, /cancel-in-progress: false/);
 });
 
-test("Wayland apt package list matches the smoke stack", () => {
+upstreamRepositoryTest("Wayland apt package list matches the smoke stack", () => {
   const packages = fs
     .readFileSync(PACKAGES_FILE, "utf8")
     .split(/\r?\n/)

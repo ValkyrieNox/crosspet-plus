@@ -2653,9 +2653,9 @@ describe("destructive reminder — wiring", () => {
     }
   });
 
-  it("the setting exists, defaults to off, and is writable through the ordinary path", () => {
+  it("the setting exists, defaults to on, and is writable through the ordinary path", () => {
     const prefs = fs.readFileSync(path.join(SRC, "prefs.js"), "utf8");
-    assert.match(prefs, /destructiveActionReminder: \{ type: "boolean", default: false \}/);
+    assert.match(prefs, /destructiveActionReminder: \{ type: "boolean", default: true \}/);
     const actions = fs.readFileSync(path.join(SRC, "settings-actions.js"), "utf8");
     assert.match(actions, /destructiveActionReminder: requireBoolean\("destructiveActionReminder"\)/);
     // Unlike the automation mode itself, this key narrows what runs unattended,

@@ -1,5 +1,7 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -8,7 +10,6 @@ const os = require("node:os");
 const createRuntime = require("../src/agent-runtime-main");
 const CodexLogMonitor = require("../agents/codex-log-monitor");
 const codex = require("../agents/codex");
-const themeLoader = require("../src/theme-loader");
 const { resolveSessionIdentity } = require("../src/session-key");
 const { CODEX_LOCAL_WORKING_STALE_FLOOR_MS: TTL } = require("../src/state-stale-cleanup");
 
@@ -22,8 +23,8 @@ const key = id => resolveSessionIdentity(raw(id), "local").sessionId;
 describe("official Codex child turn completion and model progress", () => {
   let state, runtime, monitor, dir, owners, activity;
   beforeEach(() => {
-    themeLoader.init(path.join(__dirname, "..", "src"));
-    const theme = structuredClone(themeLoader.loadTheme("clawd"));
+
+    const theme = structuredClone(createRuntimeTheme("clawd"));
     theme.timings.minDisplay = {}; theme.timings.autoReturn = {};
     state = require("../src/state")({ theme, lang: "en", doNotDisturb: false,
       miniMode: false, pendingPermissions: [], t: k => k,

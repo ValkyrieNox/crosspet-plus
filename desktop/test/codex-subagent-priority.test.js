@@ -1,9 +1,9 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const themeLoader = require("../src/theme-loader");
 const initState = require("../src/state");
 const { resolveSessionIdentity } = require("../src/session-key");
 const { resolveDominantSessionState } = require("../src/state-priority");
@@ -14,8 +14,8 @@ const key = suffix => resolveSessionIdentity(raw(suffix), "local").sessionId;
 
 function setup(t, originator) {
   t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
-  themeLoader.init(path.join(__dirname, "../src"));
-  const theme = structuredClone(themeLoader.loadTheme("clawd"));
+
+  const theme = structuredClone(createRuntimeTheme("clawd"));
   theme.timings.minDisplay = {}; theme.timings.autoReturn = {};
   const state = initState({ theme, lang: "en", doNotDisturb: false, miniMode: false,
     pendingPermissions: [], t: key => key, processKill: () => true,

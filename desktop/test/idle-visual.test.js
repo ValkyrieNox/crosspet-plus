@@ -2,8 +2,6 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
-const path = require("node:path");
 
 const {
   listIdleVisualOptions,
@@ -25,20 +23,15 @@ function makeTheme(overrides = {}) {
 }
 
 describe("listIdleVisualOptions", () => {
-  it("keeps every shipped theme's candidate list unchanged without the new field", () => {
-    const expected = {
-      calico: ["calico-idle-follow.svg", "calico-idle.apng"],
-      clawd: ["clawd-idle-follow.svg", "clawd-idle-look.svg", "clawd-idle-bubble.svg", "clawd-idle-reading.svg"],
-      cloudling: ["cloudling-idle.svg", "cloudling-idle-reading.svg"],
-      template: ["idle-follow.svg", "idle-look.gif"],
-    };
-    const themesDir = path.join(__dirname, "..", "themes");
-    assert.deepStrictEqual(fs.readdirSync(themesDir).filter((id) =>
-      fs.existsSync(path.join(themesDir, id, "theme.json"))).sort(), Object.keys(expected).sort());
-    for (const [id, files] of Object.entries(expected)) {
-      const theme = JSON.parse(fs.readFileSync(path.join(themesDir, id, "theme.json"), "utf8"));
+  it("derives the candidate list from explicit runtime fixture metadata", () => {
+    const { createRuntimeTheme } = require("./helpers/runtime-theme");
+    for (const id of ["clawd", "calico", "cloudling"]) {
+      const theme = createRuntimeTheme(id);
       assert.strictEqual(Object.hasOwn(theme, "idleVisualOptions"), false, id);
-      assert.deepStrictEqual(listIdleVisualOptions(theme).map((entry) => entry.file), files, id);
+      assert.deepStrictEqual(
+        listIdleVisualOptions(theme).map((entry) => entry.file),
+        [theme.states.idle[0], ...theme.idleAnimations.map((entry) => entry.file)], id
+      );
     }
   });
 

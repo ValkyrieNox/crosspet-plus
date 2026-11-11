@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -16,7 +17,7 @@ function electronExecutable() {
   }
 }
 
-test("cigarette SMIL and object geometry survive 1x and fractional display scales", { timeout: 90_000 }, (t) => {
+upstreamArtworkTest("cigarette SMIL and object geometry survive 1x and fractional display scales", { timeout: 90_000 }, (t) => {
   const source = fs.readFileSync(path.join(__dirname, "..", "src", "index.html"), "utf8");
   assert.match(source, /<object id="clawd-mouth-accessory"[^>]*type="image\/svg\+xml"/);
 

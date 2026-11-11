@@ -41,8 +41,50 @@ function sliceWorkflowJob(workflow, jobName) {
 }
 
 describe("package build config", () => {
+  describe("Plus native distribution", () => {
+    it("keeps backend identity and release discovery scoped to the Plus fork", () => {
+      assert.strictEqual(pkg.name, "crosspet-plus");
+      assert.strictEqual(pkg.build.appId, "com.valkyrienox.crosspet-plus");
+      assert.strictEqual(pkg.build.productName, "CrossPet Plus");
+      assert.deepStrictEqual(pkg.build.publish, [{ provider: "github", owner: "ValkyrieNox", repo: "crosspet-plus" }]);
+      assert.strictEqual(pkg.build.win.artifactName, "CrossPet-Plus-Setup-${version}-${arch}.${ext}");
+    });
+
+    it("builds both macOS architectures and uploads a native ZIP for each", () => {
+      const workflow = yaml.load(fs.readFileSync(path.join(ROOT, "..", ".github/workflows/build-desktop.yml"), "utf8"));
+      const job = workflow.jobs.macos;
+      assert.deepStrictEqual(job.strategy.matrix.arch, ["arm64", "x64"]);
+      assert.ok(job.steps.some(step => step.run === "npm run test:plus"));
+      assert.ok(job.steps.some(step => step.run === "npm run test:mac:bridge"));
+      assert.ok(job.steps.some(step => step.run === "npm run build:mac -- --arch=${{ matrix.arch }}"));
+      const upload = job.steps.find(step => step.uses === "actions/upload-artifact@v4");
+      assert.strictEqual(upload.with.path, "build/CrossPet-Plus-*-macOS-${{ matrix.arch }}.zip");
+      const { pathsFor } = require("../../scripts/build-macos.cjs");
+      for (const arch of job.strategy.matrix.arch) {
+        const paths = pathsFor("/fixture", arch, "1.2.3-plus.1");
+        assert.strictEqual(paths.app, path.join("/fixture", "build", `macos-${arch}`, "CrossPet.app"));
+        assert.strictEqual(paths.runtime, path.join("/fixture", "desktop/dist", arch === "arm64" ? "mac-arm64" : "mac", "CrossPet Plus.app"));
+        assert.strictEqual(paths.zip, path.join("/fixture", "build", `CrossPet-Plus-1.2.3-plus.1-macOS-${arch}.zip`));
+      }
+    });
+
+    it("assembles and uploads the native Windows host with its service runtime", () => {
+      const workflow = yaml.load(fs.readFileSync(path.join(ROOT, "..", ".github/workflows/build-desktop.yml"), "utf8"));
+      const job = workflow.jobs.windows;
+      assert.ok(job.steps.some(step => step.run === "npm run build:win"));
+      assert.strictEqual(job.steps.find(step => step.uses === "actions/upload-artifact@v4").with.path, "build/CrossPet-Windows.zip");
+      const build = fs.readFileSync(path.join(ROOT, "../scripts/build-windows.cjs"), "utf8");
+      assert.ok(build.includes('"app/windows/CrossPet.csproj"'));
+      assert.ok(build.includes('npmRun(["--prefix","desktop","run","build:win:dir"])'));
+      assert.ok(build.includes('copy("desktop/dist/win-unpacked","runtime")'));
+      assert.ok(build.includes('"CrossPet.exe"'));
+      assert.ok(build.includes('"build/CrossPet-Windows.zip"'));
+      assert.strictEqual(pkg.scripts["build:win:dir"], "electron-builder --win --x64 --dir --publish never");
+    });
+  });
+
   describe("full-suite CI", () => {
-    it("runs npm test on pull requests and main pushes across all three platforms", () => {
+    it("runs npm test on pull requests and main pushes across all three platforms", { skip: "Upstream-only full-suite three-platform CI is not part of Plus native packaging" }, () => {
       const workflow = loadWorkflow("test.yml");
       assert.strictEqual(workflow.name, "Test");
       assert.deepStrictEqual(Object.keys(workflow.on).sort(), [
@@ -78,7 +120,7 @@ describe("package build config", () => {
       assert.strictEqual(linuxTest.if, "runner.os == 'Linux'");
     });
 
-    it("keeps tag release jobs on full tests and limits focused mode to manual dispatch", () => {
+    it("keeps tag release jobs on full tests and limits focused mode to manual dispatch", { skip: "Upstream-only manual artifact-validation CI mode is not part of Plus native packaging" }, () => {
       const workflow = loadWorkflow("build.yml");
       assert.deepStrictEqual(workflow.on.push.tags, ["v*"]);
       assert.ok(workflow.on.workflow_dispatch.inputs.artifact_validation_only);
@@ -112,7 +154,7 @@ describe("package build config", () => {
       );
     });
 
-    it("runs in pull-request CI and uploads stable JSON manifests", () => {
+    it("runs in pull-request CI and uploads stable JSON manifests", { skip: "Upstream-only repository asset audit CI is not part of Plus native packaging" }, () => {
       const workflowPath = path.join(ROOT, ".github", "workflows", "repository-asset-audit.yml");
       assert.ok(fs.existsSync(workflowPath), "repository asset audit workflow should exist");
       const workflow = fs.readFileSync(workflowPath, "utf8");
@@ -224,16 +266,14 @@ describe("package build config", () => {
       assert.strictEqual(pkg.scripts["verify:updater-metadata"], "node scripts/verify-updater-metadata.js");
     });
 
-    it("uses reproducible installs in release and five-target package CI", () => {
-      const release = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
-      const packageAudit = fs.readFileSync(
-        path.join(ROOT, ".github", "workflows", "telegram-retirement-package-audit.yml"),
-        "utf8",
-      );
-      assert.strictEqual((release.match(/      - run: npm ci/g) || []).length, 3);
-      assert.strictEqual((packageAudit.match(/      - run: npm ci/g) || []).length, 2);
-      assert.doesNotMatch(release, /      - run: npm install(?:\s|$)/m);
-      assert.doesNotMatch(packageAudit, /      - run: npm install(?:\s|$)/m);
+    it("uses reproducible backend installs in Plus native CI", () => {
+      const workspace = require("../../package.json");
+      const workflow = yaml.load(fs.readFileSync(path.join(ROOT, "..", ".github/workflows/build-desktop.yml"), "utf8"));
+      assert.strictEqual(workspace.scripts.setup, "npm run prepare:desktop && npm --prefix desktop ci");
+      for (const job of [workflow.jobs.macos, workflow.jobs.windows]) {
+        assert.ok(job.steps.some(step => step.run === "npm run setup"));
+        assert.ok(!job.steps.some(step => /npm install/.test(step.run || "")));
+      }
     });
   });
 
@@ -268,9 +308,9 @@ describe("package build config", () => {
     });
 
     it("exposes explicit Windows architecture build scripts", () => {
-      assert.strictEqual(pkg.scripts["build:win:x64"], "electron-builder --win nsis:x64");
-      assert.strictEqual(pkg.scripts["build:win:arm64"], "electron-builder --win nsis:arm64");
-      assert.strictEqual(pkg.scripts["build:win:all"], "electron-builder --win nsis:x64 nsis:arm64");
+      assert.strictEqual(pkg.scripts["build:win:x64"], "electron-builder --win nsis:x64 --publish never");
+      assert.strictEqual(pkg.scripts["build:win:arm64"], "electron-builder --win nsis:arm64 --publish never");
+      assert.strictEqual(pkg.scripts["build:win:all"], "electron-builder --win nsis:x64 nsis:arm64 --publish never");
     });
 
     it("does not emit a redundant universal Windows installer", () => {
@@ -321,32 +361,17 @@ describe("package build config", () => {
       );
     });
 
-    it("gates both packaged apps on ad-hoc hardened signatures and required entitlements", () => {
-      const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
-      const adHocVerification = sliceWorkflowBlock(
-        workflow,
-        "      - name: Verify macOS ad-hoc hardened signatures",
-        "      - name: Assert retired Telegram sidecar is absent",
-      );
-      assert.match(adHocVerification, /^\s+if: steps\.mac-signing\.outputs\.mode == 'adhoc'$/m);
-      assert.match(adHocVerification, /dist\/mac\/Clawd on Desk\.app/);
-      assert.match(adHocVerification, /dist\/mac-arm64\/Clawd on Desk\.app/);
-      assert.match(adHocVerification, /Signature=adhoc/);
-      assert.match(adHocVerification, /adhoc,runtime/);
-      assert.match(adHocVerification, /codesign --verify --deep --strict/);
-      for (const entitlement of [
-        "com.apple.security.cs.allow-jit",
-        "com.apple.security.cs.allow-unsigned-executable-memory",
-        "com.apple.security.cs.disable-library-validation",
-      ]) {
-        assert.match(adHocVerification, new RegExp(entitlement.replace(/\./g, "\\.")));
-      }
-      assert.match(adHocVerification, /entitlement_key="\$\{entitlement\/\/\.\/\\\\\.\}"/);
-      assert.match(adHocVerification, /\/usr\/bin\/plutil -extract "\$entitlement_key" raw -o -/);
-      assert.match(adHocVerification, /!= "true"/);
+    it("signs and strictly verifies the final native Plus macOS app before archiving", () => {
+      const build = fs.readFileSync(path.join(ROOT, "../scripts/build-macos.cjs"), "utf8");
+      const signAt = build.indexOf('run("/usr/bin/codesign", ["--force", "--deep", "-s", "-", files.app]');
+      const verifyAt = build.indexOf('run("/usr/bin/codesign", ["--verify", "--deep", "--strict", files.app]');
+      const zipAt = build.indexOf('run("/usr/bin/ditto"');
+      assert.ok(signAt >= 0, "the assembled native app receives ad-hoc signing");
+      assert.ok(verifyAt > signAt, "the final signature is verified after signing");
+      assert.ok(zipAt > verifyAt, "the archive contains the verified native app");
     });
 
-    it("fails closed for tag releases unless all Developer ID secrets are present", () => {
+    it("fails closed for tag releases unless all Developer ID secrets are present", { skip: "Upstream-only Developer ID signing and notarization is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       const prepareSigning = sliceWorkflowBlock(
         workflow,
@@ -393,7 +418,7 @@ describe("package build config", () => {
       assert.match(developerBuild, /APPLE_API_KEY: \$\{\{ steps\.mac-signing\.outputs\.api_key_path \}\}/);
     });
 
-    it("always removes the decoded notarization key before artifact verification", () => {
+    it("always removes the decoded notarization key before artifact verification", { skip: "Upstream-only Developer ID notarization key handling is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       const keyCleanup = sliceWorkflowBlock(
         workflow,
@@ -408,7 +433,7 @@ describe("package build config", () => {
       assert.match(keyCleanup, /run: rm -f -- "\$APPLE_API_KEY_FILE"/);
     });
 
-    it("verifies the notarized app inside each final DMG without post-build DMG mutation", () => {
+    it("verifies the notarized app inside each final DMG without post-build DMG mutation", { skip: "Upstream-only notarized DMG publication is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       const developerVerification = sliceWorkflowBlock(
         workflow,
@@ -445,7 +470,7 @@ describe("package build config", () => {
       assert.doesNotMatch(workflow, /stapler staple[^\n]*\.dmg/);
     });
 
-    it("verifies ZIP payloads and gates every required macOS release file twice", () => {
+    it("verifies ZIP payloads and gates every required macOS release file twice", { skip: "Upstream-only DMG and updater ZIP publication gates is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       const zipVerification = sliceWorkflowBlock(
         workflow,
@@ -607,12 +632,12 @@ describe("package build config", () => {
 
     it("declares the asar inspector directly and keeps five target build commands", () => {
       assert.match(pkg.devDependencies["@electron/asar"], /^\^3\./);
-      assert.strictEqual(pkg.scripts["build:mac:x64"], "electron-builder --mac dmg:x64 zip:x64");
-      assert.strictEqual(pkg.scripts["build:mac:arm64"], "electron-builder --mac dmg:arm64 zip:arm64");
-      assert.strictEqual(pkg.scripts["build:linux:x64"], "electron-builder --linux AppImage:x64 deb:x64");
+      assert.strictEqual(pkg.scripts["build:mac:x64"], "electron-builder --mac dmg:x64 zip:x64 --publish never");
+      assert.strictEqual(pkg.scripts["build:mac:arm64"], "electron-builder --mac dmg:arm64 zip:arm64 --publish never");
+      assert.strictEqual(pkg.scripts["build:linux:x64"], "electron-builder --linux AppImage:x64 deb:x64 --publish never");
     });
 
-    it("release builds assert the retired sidecar is absent from every unpacked tree", () => {
+    it("release builds assert the retired sidecar is absent from every unpacked tree", { skip: "Upstream-only five-target retired sidecar audit is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       for (const root of [
         "dist/win-unpacked/resources",
@@ -626,7 +651,7 @@ describe("package build config", () => {
       assert.doesNotMatch(workflow, /fetch:sidecars|verify-sidecar|assert:packaged-sidecar/);
     });
 
-    it("keeps full tag tests while allowing a manual packaging-only evidence run", () => {
+    it("keeps full tag tests while allowing a manual packaging-only evidence run", { skip: "Upstream-only manual artifact-validation CI mode is not part of Plus native packaging" }, () => {
       const workflow = fs
         .readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8")
         .replace(/\r\n/g, "\n");
@@ -679,7 +704,7 @@ describe("package build config", () => {
       }
     });
 
-    it("builds and uploads all five target artifacts in pull-request and release CI", () => {
+    it("builds and uploads all five target artifacts in pull-request and release CI", { skip: "Upstream-only five-target package audit CI is not part of Plus native packaging" }, () => {
       const workflowPath = path.join(ROOT, ".github", "workflows", "telegram-retirement-package-audit.yml");
       assert.ok(fs.existsSync(workflowPath), "five-target package audit workflow should exist");
       const workflow = fs.readFileSync(workflowPath, "utf8");
@@ -732,7 +757,7 @@ describe("package build config", () => {
       assert.match(workflow, /Clawd-on-Desk-\*-amd64\.deb/);
     });
 
-    it("gates release artifacts on native payload, packaged calls, and updater metadata", () => {
+    it("gates release artifacts on native payload, packaged calls, and updater metadata", { skip: "Upstream-only five-target updater publication gates is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       assert.match(workflow, /native-package-audit:\s+needs: validate-release\s+uses: \.\/\.github\/workflows\/telegram-retirement-package-audit\.yml/);
       assert.match(workflow, /needs: \[build-windows, build-mac, build-linux, native-package-audit\]/);
@@ -747,7 +772,7 @@ describe("package build config", () => {
       }
     });
 
-    it("publishes GitHub releases only for pushed version tags", () => {
+    it("publishes GitHub releases only for pushed version tags", { skip: "Upstream-only GitHub release publication is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       const releaseIndex = findWorkflowJobIndex(workflow, "release");
       assert.ok(releaseIndex >= 0, "workflow should define a release job");
@@ -761,7 +786,7 @@ describe("package build config", () => {
       assert.ok(releaseGateIndex < bodyPathIndex, "release job gate should run before release publication");
     });
 
-    it("creates tag releases as drafts for final asset inspection", () => {
+    it("creates tag releases as drafts for final asset inspection", { skip: "Upstream-only draft GitHub release publication is not part of Plus native packaging" }, () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       const releaseIndex = findWorkflowJobIndex(workflow, "release");
       assert.ok(releaseIndex >= 0, "workflow should define a release job");

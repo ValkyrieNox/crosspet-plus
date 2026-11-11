@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
@@ -24,7 +25,7 @@ function supportAgents(file) {
   return new Set(names);
 }
 
-test("README agent support lists track the English product names", () => {
+upstreamRepositoryTest("README agent support lists track the English product names", () => {
   const english = supportAgents("README.md");
   for (const file of localizedReadmes) {
     const translated = supportAgents(file);

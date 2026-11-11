@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -24,7 +25,7 @@ const LOCALIZED_READMES = [
   "README.es.md",
 ];
 
-test("ordinary tray and README callers use the canonical application icon", () => {
+upstreamRepositoryTest("ordinary tray and README callers use the canonical application icon", () => {
   assert.ok(fs.existsSync(CANONICAL_ICON), "assets/icon.png must remain the canonical icon");
   assert.strictEqual(
     fs.existsSync(RETIRED_TRAY_ICON),
@@ -67,7 +68,7 @@ test("canonical and tray-specific icons remain packaged", () => {
   }
 });
 
-test("asset policy owns only the canonical ordinary application icon", () => {
+upstreamRepositoryTest("asset policy owns only the canonical ordinary application icon", () => {
   const policy = JSON.parse(
     fs.readFileSync(path.join(ROOT, "tools", "repository-asset-policy.json"), "utf8"),
   );

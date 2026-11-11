@@ -1,19 +1,19 @@
 "use strict";
+
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const themeLoader = require("../src/theme-loader");
 const initState = require("../src/state");
 const { isSessionInProgress, buildSessionSnapshotEntry } = require("../src/state-session-snapshot");
 const createSettingsEffectRouter = require("../src/settings-effect-router");
-themeLoader.init(path.join(__dirname, "..", "src"));
+
 const sid = "codex:aaaaaaaa-1111-4111-8111-111111111111";
 const temporary = (extra = {}) => ({ agentId: "codex", codexClientEphemeral: true,
   codexOriginator: "Codex Desktop", profileId: "local", state: "thinking",
   updatedAt: Date.now(), recentEvents: [{ event: "UserPromptSubmit", at: Date.now() }], ...extra });
 
 function harness(t, extra = {}) {
-  const theme = structuredClone(themeLoader.loadTheme("clawd"));
+  const theme = structuredClone(createRuntimeTheme("clawd"));
   theme.minDisplay = {};
   const ctx = { theme, lang: "en", pendingPermissions: [], sessionHudHideActiveCodexEphemeral: true,
     processKill() { const e = new Error("ESRCH"); e.code = "ESRCH"; throw e; },

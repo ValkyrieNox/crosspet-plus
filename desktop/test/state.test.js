@@ -1,3 +1,4 @@
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
 // test/state.test.js — Unit tests for src/state.js core logic
 const { describe, it, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert");
@@ -5,12 +6,10 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-// Load default theme for test ctx
-const themeLoader = require("../src/theme-loader");
-themeLoader.init(path.join(__dirname, "..", "src"));
-const _defaultTheme = themeLoader.loadTheme("clawd");
-const _calicoTheme = themeLoader.loadTheme("calico");
-const _cloudlingTheme = themeLoader.loadTheme("cloudling");
+// Explicit runtime bindings are independent of Plus service artwork.
+const _defaultTheme = createRuntimeTheme("clawd");
+const _calicoTheme = createRuntimeTheme("calico");
+const _cloudlingTheme = createRuntimeTheme("cloudling");
 const { createTranslator } = require("../src/i18n");
 const { makeSessionKey, resolveSessionIdentity } = require("../src/session-key");
 const { isSessionInProgress, sessionSnapshotSignature } = require("../src/state-session-snapshot");
@@ -76,6 +75,54 @@ describe("Claude correlated batch phase", () => {
   beforeEach(() => { ctx = makeCtx(); api = require("../src/state")(ctx); });
   afterEach(() => api.cleanup());
   const sid = "batch-session";
+  it("updates only the matching command result without changing the session lifecycle", () => {
+    const first = { label: "npm run build", status: "running", output: "", callId: "a" };
+    const second = { label: "curl --version", status: "running", output: "", callId: "b" };
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", commandPreview: first });
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", commandPreview: second });
+    const session = api.sessions.get(sid);
+    const at = session.updatedAt;
+    const events = JSON.stringify(session.recentEvents);
+    assert.equal(api.updateSessionMetadata(sid, { expectedAgentId: "codex", commandPreview: { ...first, status: "failure" } }), false);
+    assert.equal(session.commandPreview.callId, "b");
+    assert.equal(api.updateSessionMetadata(sid, { expectedAgentId: "claude-code", commandPreview: { ...second, status: "success" } }), false);
+    assert.equal(api.updateSessionMetadata(sid, { expectedAgentId: "codex", commandPreview: { ...second, status: "success", output: "ok" } }), true);
+    assert.equal(session.commandPreview.status, "success");
+    assert.equal(session.updatedAt, at);
+    assert.equal(JSON.stringify(session.recentEvents), events);
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", toolName: "Read" });
+    assert.equal(api.sessions.get(sid).commandPreview.status, "success");
+  });
+  it("preserves an active command across unrelated tools until the turn ends", () => {
+    const preview = { label: "curl", status: "running", output: "", callId: "c1" };
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", commandPreview: preview });
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", toolName: "Read" });
+    assert.deepEqual(api.sessions.get(sid).commandPreview, preview);
+    api.updateSession(sid, "idle", "Stop", { agentId: "codex" });
+    assert.equal(api.sessions.get(sid).commandPreview.status, "finished");
+  });
+  it("keeps a yielded command label through polling and its final result", () => {
+    const start = { label: "npm run build", status: "running", output: "", callId: "start", sessionId: "42" };
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", commandPreview: start });
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", toolName: "Read" });
+    assert.equal(api.sessions.get(sid).commandPreview.sessionId, "42");
+    const poll = { label: "", status: "running", output: "", callId: "poll", sessionId: "42" };
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", commandPreview: poll });
+    assert.equal(api.sessions.get(sid).commandPreview.label, "npm run build");
+    assert.equal(api.sessions.get(sid).commandPreview.callId, "poll");
+    assert.equal(api.updateSessionMetadata(sid, { expectedAgentId: "codex", commandPreview: { ...poll, status: "success" } }), true);
+    assert.equal(api.sessions.get(sid).commandPreview.label, "npm run build");
+    assert.equal(api.sessions.get(sid).commandPreview.status, "success");
+  });
+  it("keeps the current command label per session and clears it on the next tool", () => {
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", toolName: "exec_command", commandName: "curl" });
+    assert.equal(api.sessions.get(sid).commandName, "curl");
+    api.updateSession("other", "working", "PreToolUse", { agentId: "codex", toolName: "exec_command", commandName: "ssh" });
+    assert.equal(api.sessions.get(sid).commandName, "curl");
+    assert.equal(api.sessions.get("other").commandName, "ssh");
+    api.updateSession(sid, "working", "PreToolUse", { agentId: "codex", toolName: "Read" });
+    assert.equal(api.sessions.get(sid).commandName, "");
+  });
   function event(name, state, extra = {}) {
     return api.updateSession(sid, state, name, { agentId: "claude-code", claudePromptId: "prompt-1", ...extra });
   }
@@ -4907,7 +4954,8 @@ describe("buildSessionSnapshot", () => {
     assert.strictEqual(oldWorking.badge, "running");
     assert.strictEqual(oldWorking.sessionTitle, "Fix login");
     assert.strictEqual(oldWorking.displayTitle, "Fix login");
-    assert.strictEqual(oldWorking.iconUrl.startsWith("file:"), true);
+    // Plus omits the optional upstream agent icons.
+    assert.strictEqual(oldWorking.iconUrl, null);
     assert.deepStrictEqual(oldWorking.lastEvent, {
       labelKey: "eventLabelPreToolUse",
       rawEvent: "PreToolUse",

@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -44,7 +45,7 @@ test("PWA icon URLs use canonical packaged assets without tracked copies", () =>
   );
 });
 
-test("asset policy owns the canonical Windows and PWA icon sources", () => {
+upstreamRepositoryTest("asset policy owns the canonical Windows and PWA icon sources", () => {
   const policy = JSON.parse(
     fs.readFileSync(path.join(ROOT, "tools", "repository-asset-policy.json"), "utf8"),
   );

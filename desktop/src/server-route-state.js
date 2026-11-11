@@ -1,5 +1,6 @@
 "use strict";
 const { readCodexClientEphemeral } = require("./codex-session-persistence");
+const { normalizeCommandPreview } = require("../hooks/shared-process");
 
 const path = require("path");
 const { resolveSessionIdentity } = require("./session-key");
@@ -419,6 +420,9 @@ function handleStatePost(req, res, options) {
         ? data.ghostty_terminal_id.trim()
         : null;
       const toolName = typeof data.tool_name === "string" && data.tool_name ? data.tool_name : null;
+      const commandName = typeof data.command_name === "string" && /^[\p{L}\p{N}_.+-]{1,64}$/u.test(data.command_name)
+        ? data.command_name : "";
+      const commandPreview = normalizeCommandPreview(data.command_preview);
       const subagentLifecycleSource = (
         data.subagent_lifecycle_source === "native"
         || ["synthetic-tool", "synthetic-task"].includes(data.subagent_lifecycle_source)
@@ -727,6 +731,10 @@ function handleStatePost(req, res, options) {
         let metadataAccepted = false;
         if (typeof ctx.updateSessionMetadata === "function") {
           const metaUpdate = {};
+          if (commandPreview && agentId === "codex") {
+            metaUpdate.commandPreview = commandPreview;
+            metaUpdate.expectedAgentId = "codex";
+          }
           if (
             contextUsage
             && localClaudeStatuslineMetadataAllowed
@@ -1254,6 +1262,8 @@ function handleStatePost(req, res, options) {
             assistantLastOutput,
             assistantLastOutputTruncated,
             toolName,
+            ...(Object.hasOwn(data, "command_name") ? { commandName } : {}),
+            ...(commandPreview ? { commandPreview } : {}),
             ...(toolUseId ? { toolUseId } : {}),
             ...(copilotWaitKey ? { copilotWaitKey } : {}),
             ...(copilotToolKeys ? { copilotToolKeys } : {}),

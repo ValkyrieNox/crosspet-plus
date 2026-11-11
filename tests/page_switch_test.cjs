@@ -163,6 +163,15 @@ async function fresh() {
 function assert(c, msg) { if (!c) throw Error(msg) }
 
 const cases = [
+  ['short_command_is_visible_before_body_pose_dwell_finishes', async e => {
+    e.run(`shownAt=Date.now(); hook('gpt','running','PreToolUse',{commandPreviewAt:Date.now()/1000, commandPreview:{label:'curl',status:'running',callId:'short'}})`)
+    assert(e.run("$('fx').innerHTML.includes('$ curl')"), 'running command hidden during body dwell')
+    await e.advance(50)
+    e.run(`hook('gpt','thinking','PostToolUse',{commandPreviewAt:Date.now()/1000, commandPreview:{label:'curl',status:'success',output:'ok',callId:'short'}})`)
+    assert(e.run("$('fx').innerHTML.includes('✓ ok')"), 'short command result hidden')
+    await e.advance(2000)
+    assert(e.run("$('fx').innerHTML.includes('✓ ok')"), 'result disappeared before hold elapsed')
+  }],
   ['plus_backend_loss_restores_idle_and_native_legacy_routing', async e => {
     await multiOn(e, 'gpt')
     e.run(`setSessions('gpt', csess(['plus','asking','codex'])); applyClientState('gpt','codex',{character:'gpt',client:'codex',key:'plus',pose:'asking',ts:Date.now()/1000,_crosspetPlus:'instance-a'})`)

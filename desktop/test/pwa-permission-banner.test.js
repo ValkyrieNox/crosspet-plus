@@ -1,4 +1,6 @@
 "use strict";
+const { skipUpstreamFile } = require("./helpers/upstream-artifacts");
+if (skipUpstreamFile('upstream PWA approval banner', 'The upstream PWA frontend is excluded from the native Plus distribution')) return;
 
 const assert = require("node:assert");
 const fs = require("node:fs");

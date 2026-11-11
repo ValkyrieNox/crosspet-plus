@@ -99,6 +99,29 @@ function makeRealStateHarness({ preserveThemeTimings = false, ctxOverrides = {} 
 }
 
 describe("agent-runtime-main", () => {
+  it("routes correlated command output from the monitor through existing-session metadata", () => {
+    const harness = makeRealStateHarness();
+    const instances = [];
+    const runtime = createAgentRuntimeMain({
+      loadCodexLogMonitor: () => makeFakeMonitorClass(instances),
+      loadCodexAgent: () => ({ id: "codex" }), codexSubagentClassifier: {},
+      getStateRuntime: () => harness.state,
+      updateSession: (...args) => harness.state.updateSession(...args),
+    });
+    const raw = "codex:command-preview", id = localSessionKey(raw);
+    const preview = { label: "npm run build", status: "running", output: "", callId: "command" };
+    try {
+      const monitor = runtime.startCodexLogMonitor();
+      runtime.updateSessionFromServer(id, "working", "PreToolUse", { agentId: "codex", hookSource: "codex-official", commandPreview: preview });
+      const session = harness.state.sessions.get(id);
+      const events = JSON.stringify(session.recentEvents), updatedAt = session.updatedAt;
+      monitor.emit(raw, "working", "response_item:function_call_output", { commandPreview: { ...preview, status: "success", output: "Done" } });
+      assert.equal(session.commandPreview.status, "success");
+      assert.equal(session.commandPreview.output, "Done");
+      assert.equal(session.updatedAt, updatedAt);
+      assert.equal(JSON.stringify(session.recentEvents), events);
+    } finally { runtime.cleanup(); harness.state.cleanup(); }
+  });
   it("presents manual compaction after Stop while continuing to reject late work", ({ mock }) => {
     mock.timers.enable({ apis: ["setTimeout", "Date"] });
     const harness = makeRealStateHarness();

@@ -289,7 +289,7 @@ test("settings window runtime creates the Settings BrowserWindow with taskbar id
   const win = FakeBrowserWindow.instances[0];
 
   assert.strictEqual(runtime.getWindow(), win);
-  assert.strictEqual(win.options.title, "Clawd Settings");
+  assert.strictEqual(win.options.title, "CrossPet · 任务与审批设置");
   assert.strictEqual(win.options.x, 240);
   assert.strictEqual(win.options.y, 70);
   assert.strictEqual(win.options.width, 800);

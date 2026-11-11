@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -120,7 +121,7 @@ test("rejects a fifth unreviewed top-level export without a colon", () => {
   assert.throws(() => validateAppRunContent(changed), /top-level exports changed/);
 });
 
-test("release and Wayland workflows gate the final AppImage before artifact handoff", () => {
+upstreamRepositoryTest("release and Wayland workflows gate the final AppImage before artifact handoff", () => {
   const release = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
   const wayland = fs.readFileSync(path.join(ROOT, ".github", "workflows", "wayland-smoke.yml"), "utf8");
   const releaseLinux = workflowJob(release, "build-linux");
@@ -139,7 +140,7 @@ test("release and Wayland workflows gate the final AppImage before artifact hand
   );
 });
 
-test("Wayland smoke PR paths cover the hook closure by pattern instead of a drifting hand list", () => {
+upstreamRepositoryTest("Wayland smoke PR paths cover the hook closure by pattern instead of a drifting hand list", () => {
   const wayland = fs.readFileSync(path.join(ROOT, ".github", "workflows", "wayland-smoke.yml"), "utf8");
   const start = wayland.indexOf("  pull_request:");
   const end = wayland.indexOf("\npermissions:");

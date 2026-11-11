@@ -157,6 +157,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     // MARK: 启动
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        defer { PlusUpdateInstaller.acknowledgeLaunch() }
         syncBundledResources()
         markLaunched()
         try? FileManager.default.createDirectory(at: eventsDir, withIntermediateDirectories: true)   // 钩子 / 插件的事件记录写在这里（见 App+Log）

@@ -37,6 +37,87 @@ const COMPLETE = { type: "event_msg", payload: { type: "task_complete" } };
 const FUNC = { type: "response_item", payload: { type: "function_call" } };
 
 describe("Codex remote monitor", () => {
+  it("posts updated executable labels while consecutive commands stay working", () => {
+    const entry = { sessionId: "codex:commands", cwd: "/repo", isSubagent: false, lastEventTime: 0, lastState: null };
+    const posted = [];
+    const postState = (sid, state, event, cwd, child, extra) => {
+      posted.push(JSON.parse(__test.buildPostStateBody(sid, state, event, cwd, child, "remote", extra)));
+    };
+    for (const cmd of ["curl --version", "ssh user@host"]) {
+      __test.processLine(JSON.stringify({
+        type: "response_item", payload: { type: "function_call", name: "exec_command", arguments: JSON.stringify({ cmd }) },
+      }), entry, { postState });
+    }
+    assert.deepStrictEqual(posted.map(row => row.command_name), ["curl", "ssh"]);
+    assert.ok(posted.every(row => row.state === "working"));
+    assert.ok(posted.every(row => !Object.hasOwn(row, "arguments") && !Object.hasOwn(row, "input")));
+    assert.ok(posted.every(row => row.command_preview.label.length <= 64));
+  });
+  it("posts correlated command results as metadata without replaying lifecycle", () => {
+    const entry = { sessionId: "codex:commands", cwd: "/repo", lastState: "working" };
+    const posted = [];
+    const postState = (sid, state, event, cwd, child, extra) => {
+      posted.push(JSON.parse(__test.buildPostStateBody(sid, state, event, cwd, child, "remote", extra)));
+    };
+    const feed = payload => __test.processLine(JSON.stringify({ type: "response_item", payload }), entry, { postState });
+    for (const call_id of ["old", "new"]) feed({ type: "function_call", name: "exec_command", call_id, arguments: JSON.stringify({ cmd: "npm run build > test.log" }) });
+    feed({ type: "function_call_output", call_id: "old", output: { exit_code: 1, stdout: "old failure" } });
+    feed({ type: "function_call_output", call_id: "new", output: { session_id: 42, stdout: "Building" } });
+    assert.strictEqual(posted.length, 3);
+    assert.strictEqual(posted[2].metadata_only, true);
+    assert.strictEqual(posted[2].command_preview.callId, "new");
+    assert.strictEqual(posted[2].command_preview.status, "running");
+    assert.strictEqual(posted[2].command_preview.output, "Building");
+    assert.strictEqual(posted[2].state, "working");
+    feed({ type: "function_call_output", call_id: "new", output: { exit_code: 2, stderr: "Build failed" } });
+    assert.strictEqual(posted[3].command_preview.status, "failure");
+    assert.strictEqual(entry.commandPreviews.size, 2);
+    entry.backfilling = true;
+    feed({ type: "function_call_output", call_id: "new", output: { exit_code: 0, stdout: "historical" } });
+    assert.strictEqual(posted.length, 4);
+  });
+
+  it("correlates yielded exec commands through write_stdin results", () => {
+    const entry = { sessionId: "codex:yielded", cwd: "/repo", lastState: "working" };
+    const posted = [];
+    const postState = (sid, state, event, cwd, child, extra) => {
+      posted.push(JSON.parse(__test.buildPostStateBody(sid, state, event, cwd, child, "remote", extra)));
+    };
+    const feed = payload => __test.processLine(JSON.stringify({ type: "response_item", payload }), entry, { postState });
+    feed({ type: "function_call", name: "exec_command", call_id: "start", arguments: JSON.stringify({ cmd: "npm run build" }) });
+    feed({ type: "function_call_output", call_id: "start", output: { session_id: 42, stdout: "Building" } });
+    feed({ type: "function_call", name: "read_file", call_id: "read", arguments: JSON.stringify({ path: "/repo/package.json" }) });
+    assert.strictEqual(entry.activeCommandCallId, "start");
+    assert.strictEqual(entry.commandPreviews.size, 1);
+    feed({ type: "function_call", name: "write_stdin", call_id: "poll", arguments: JSON.stringify({ session_id: 42, chars: "" }) });
+    feed({ type: "function_call_output", call_id: "poll", output: { exit_code: 0, stdout: "Build complete" } });
+    assert.strictEqual(posted.length, 5);
+    assert.strictEqual(posted[1].command_preview.label, "npm run build");
+    assert.strictEqual(posted[1].command_preview.status, "running");
+    assert.strictEqual(posted[3].command_preview.label, "");
+    assert.strictEqual(posted[3].command_preview.sessionId, "42");
+    assert.strictEqual(posted[4].command_preview.sessionId, "42");
+    assert.strictEqual(posted[4].command_preview.callId, "poll");
+    assert.strictEqual(posted[4].command_preview.status, "success");
+    assert.strictEqual(posted[4].command_preview.output, "Build complete");
+    assert.strictEqual(posted[4].metadata_only, true);
+    assert.strictEqual(entry.commandPreviews.size, 2);
+  });
+
+  it("bounds command correlation storage and rejects aged command output", () => {
+    const entry = { sessionId: "codex:bounded", cwd: "/repo", lastState: "working" };
+    const posted = [];
+    const options = { postState: (...args) => posted.push(args) };
+    for (let i = 0; i < 40; i++) __test.processLine(JSON.stringify({ type: "response_item", payload: {
+      type: "function_call", name: "exec_command", call_id: String(i), arguments: JSON.stringify({ cmd: "npm run build" }),
+    } }), entry, options);
+    assert.strictEqual(entry.commandPreviews.size, 32);
+    __test.processLine(JSON.stringify({ timestamp: "2000-01-01T00:00:00Z", type: "response_item", payload: {
+      type: "function_call_output", call_id: "39", output: { exit_code: 0 },
+    } }), entry, options);
+    assert.strictEqual(posted.length, 40);
+  });
+
   it("exits only after the bounded delivery-failure threshold and resets on success", () => {
     let now = 1_000;
     let exits = 0;

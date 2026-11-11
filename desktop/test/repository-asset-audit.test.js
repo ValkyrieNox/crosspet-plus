@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
@@ -615,7 +616,7 @@ describe("repository asset audit", () => {
     assert.ok(stableJson(value).endsWith("\n"));
   });
 
-  it("keeps prospective tracked media under the hard budget", () => {
+  upstreamRepositoryTest("keeps prospective tracked media under the hard budget", () => {
     const root = path.resolve(__dirname, "..");
     const policy = JSON.parse(
       fs.readFileSync(path.join(root, "tools", "repository-asset-policy.json"), "utf8")
@@ -634,7 +635,7 @@ describe("repository asset audit", () => {
     );
   });
 
-  it("audits the prospective tree without a hard-budget error", () => {
+  upstreamRepositoryTest("audits the prospective tree without a hard-budget error", () => {
     const root = path.resolve(__dirname, "..");
     const output = fs.mkdtempSync(path.join(os.tmpdir(), "asset-audit-prospective-"));
     try {
@@ -739,7 +740,7 @@ describe("repository asset audit", () => {
     }
   });
 
-  it("audits the repository twice with byte-identical manifests and reports", () => {
+  upstreamRepositoryTest("audits the repository twice with byte-identical manifests and reports", () => {
     const root = path.resolve(__dirname, "..");
     const firstOutput = fs.mkdtempSync(path.join(os.tmpdir(), "asset-audit-first-"));
     const secondOutput = fs.mkdtempSync(path.join(os.tmpdir(), "asset-audit-second-"));

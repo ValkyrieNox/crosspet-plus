@@ -24,14 +24,27 @@ function makeFixture(t, { packageVersion = "1.2.3", lockVersion = packageVersion
   return root;
 }
 
-test("the current checkout satisfies the release version contract", () => {
-  const result = verifyReleaseVersion({ root: path.join(__dirname, ".."), env: {} });
-  assert.deepStrictEqual(result.errors, []);
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.version, "1.6.0");
+test("Plus workspace and backend each keep their authoritative versions in sync", () => {
+  const root = path.join(__dirname, "..", "..");
+  const workspace = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const version = fs.readFileSync(path.join(root, "VERSION"), "utf8").trim();
+  assert.match(version, /^\d+\.\d+\.\d+-plus\.\d+$/);
+  assert.equal(workspace.version, version);
+  // The dependency-free workspace currently has no lockfile. Check it if added.
+  const rootLock = path.join(root, "package-lock.json");
+  if (fs.existsSync(rootLock)) {
+    const lock = JSON.parse(fs.readFileSync(rootLock, "utf8"));
+    assert.equal(lock.version, version);
+    assert.equal(lock.packages[""].version, version);
+  }
+  const backend = require("../package.json");
+  const backendLock = require("../package-lock.json");
+  assert.match(backend.version, /^\d+\.\d+\.\d+-plus\.\d+$/);
+  assert.equal(backendLock.version, backend.version);
+  assert.equal(backendLock.packages[""].version, backend.version);
 });
 
-test("the authoritative draft smoke checklist tracks the current package version", () => {
+test("the authoritative draft smoke checklist tracks the current package version", { skip: "Upstream-only smoke checklist is not part of Plus native releases" }, () => {
   const root = path.join(__dirname, "..");
   const version = require(path.join(root, "package.json")).version;
   const escapedVersion = version.replace(/\./g, "\\.");
@@ -60,24 +73,19 @@ test("branch workflow refs are ignored while tag refs are enforced", () => {
   assert.strictEqual(resolveTagName({ GITHUB_REF: "refs/tags/v2.0.0" }), "v2.0.0");
 });
 
-test("build workflow validates the release contract before every platform build", () => {
-  const workflow = fs.readFileSync(
-    path.join(__dirname, "..", ".github", "workflows", "build.yml"),
-    "utf8",
-  ).replace(/\r\n/g, "\n");
-  assert.match(workflow, /validate-release:\s*[\s\S]*?npm run verify:release/);
-  for (const job of ["build-windows", "build-mac", "build-linux"]) {
-    assert.match(
-      workflow,
-      new RegExp(`\\n  ${job}:\\n    needs: validate-release`),
-    );
+test("Plus build workflow packages both native platforms using root build scripts", () => {
+  const root = path.join(__dirname, "..", "..");
+  const workflow = require("js-yaml").load(fs.readFileSync(path.join(root, ".github/workflows/build-desktop.yml"), "utf8"));
+  assert.deepEqual(workflow.on.push.tags, ["v*-plus.*"]);
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  const pkg = require("../../package.json");
+  for (const [jobName, script] of [["macos", "build:mac"], ["windows", "build:win"]]) {
+    const steps = workflow.jobs[jobName].steps;
+    const setupAt = steps.findIndex(step => step.run === "npm run setup");
+    const buildAt = steps.findIndex(step => step.run && step.run.startsWith(`npm run ${script}`));
+    assert.ok(setupAt >= 0 && buildAt > setupAt, `${jobName} prepares its backend before packaging`);
+    assert.equal(pkg.scripts[script], `node scripts/build-${jobName === "macos" ? "macos" : "windows"}.cjs`);
+    const upload = steps.find(step => step.uses === "actions/upload-artifact@v4");
+    assert.equal(upload.with["if-no-files-found"], "error");
   }
-  assert.match(
-    workflow,
-    /release:\s*\n\s*if: github\.event_name == 'push' && startsWith\(github\.ref, 'refs\/tags\/v'\)/,
-  );
-  assert.strictEqual(
-    (workflow.match(/verify-updater-metadata\.js[^\n]+--package-json package\.json/g) || []).length,
-    3,
-  );
 });

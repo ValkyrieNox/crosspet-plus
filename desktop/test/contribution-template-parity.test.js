@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 "use strict";
+const { skipUpstreamFile } = require("./helpers/upstream-artifacts");
+if (skipUpstreamFile("upstream bilingual issue templates", "Original Clawd issue forms are excluded from the Plus repository")) return;
 
 const assert = require("node:assert");
 const fs = require("node:fs");

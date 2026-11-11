@@ -1,12 +1,12 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 // Seam between delegated-child presentation (#1270) and the temporary-chat
 // collapse options (#1258): the child/pending projection must run before the
 // strict temporary-chat filter, in both the HUD snapshot and the pet.
 const { describe, it, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const themeLoader = require("../src/theme-loader");
 const { resolveSessionIdentity } = require("../src/session-key");
 const { isHudSession } = require("../src/session-hud").__test;
 
@@ -16,8 +16,8 @@ const rawChild = "codex:bbbbbbbb-2222-4222-8222-222222222222";
 const rawSecondChild = "codex:cccccccc-2222-4222-8222-222222222222";
 
 function makeState(overrides = {}) {
-  themeLoader.init(path.join(__dirname, "..", "src"));
-  const theme = structuredClone(themeLoader.loadTheme("clawd"));
+
+  const theme = structuredClone(createRuntimeTheme("clawd"));
   theme.timings.minDisplay = {}; theme.timings.autoReturn = {};
   return require("../src/state")({ theme, lang: "en", doNotDisturb: false,
     miniMode: false, pendingPermissions: [], t: k => k,

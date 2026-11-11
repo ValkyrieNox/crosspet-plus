@@ -1,6 +1,8 @@
 "use strict";
 
-const { describe, it } = require("node:test");
+const { describe, it, before, after } = require("node:test");
+const vm = require("node:vm");
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 const assert = require("node:assert");
 const fs = require("fs");
 const os = require("os");
@@ -144,7 +146,22 @@ function maximumCompositeContrast(png, background) {
   return maximum;
 }
 
+function loadIconFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "crosspet-icon-paths-"));
+  const directory = path.join(root, "assets", "icons", "agents");
+  fs.mkdirSync(directory, { recursive: true });
+  for (const agent of getAllAgents()) fs.writeFileSync(path.join(directory, `${agent.id}.png`), "fixture");
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(require.resolve("../src/state-agent-icons"), "utf8"), {
+    require, module, __dirname: path.join(root, "src"),
+  });
+  return { ...module.exports, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+}
+
 describe("state agent icons", () => {
+  let fixture;
+  before(() => { fixture = loadIconFixture(); });
+  after(() => fixture.cleanup());
   it("returns undefined for BrowserWindow menu icons when nativeImage is unavailable", () => {
     assert.strictEqual(getAgentIcon("claude-code"), undefined);
   });
@@ -156,47 +173,47 @@ describe("state agent icons", () => {
     assert.strictEqual(getAgentIconUrl("../claude-code"), null);
   });
 
-  it("returns a file URL for bundled agent icons", () => {
-    const iconUrl = getAgentIconUrl("claude-code");
+  it("returns a file URL for fixture agent icons", () => {
+    const iconUrl = fixture.getAgentIconUrl("claude-code");
 
     assert.strictEqual(new URL(iconUrl).protocol, "file:");
     assert.strictEqual(
       path.normalize(fileURLToPath(iconUrl)),
-      path.join(AGENT_ICON_DIR, "claude-code.png")
+      path.join(fixture.AGENT_ICON_DIR, "claude-code.png")
     );
   });
 
-  it("returns the bundled Kiro PNG icon", () => {
-    const iconUrl = getAgentIconUrl("kiro-cli");
+  it("returns the fixture Kiro PNG icon", () => {
+    const iconUrl = fixture.getAgentIconUrl("kiro-cli");
 
     assert.strictEqual(new URL(iconUrl).protocol, "file:");
     assert.strictEqual(
       path.normalize(fileURLToPath(iconUrl)),
-      path.join(AGENT_ICON_DIR, "kiro-cli.png")
+      path.join(fixture.AGENT_ICON_DIR, "kiro-cli.png")
     );
-    assert.strictEqual(getAgentIconPath("kiro-cli"), path.join(AGENT_ICON_DIR, "kiro-cli.png"));
+    assert.strictEqual(fixture.getAgentIconPath("kiro-cli"), path.join(fixture.AGENT_ICON_DIR, "kiro-cli.png"));
   });
 
-  it("returns bundled PNG icons for Pi and OpenClaw", () => {
-    const iconUrl = getAgentIconUrl("pi");
+  it("returns fixture PNG icons for Pi and OpenClaw", () => {
+    const iconUrl = fixture.getAgentIconUrl("pi");
 
     assert.strictEqual(new URL(iconUrl).protocol, "file:");
     assert.strictEqual(
       path.normalize(fileURLToPath(iconUrl)),
-      path.join(AGENT_ICON_DIR, "pi.png")
+      path.join(fixture.AGENT_ICON_DIR, "pi.png")
     );
-    assert.strictEqual(getAgentIconPath("pi"), path.join(AGENT_ICON_DIR, "pi.png"));
+    assert.strictEqual(fixture.getAgentIconPath("pi"), path.join(fixture.AGENT_ICON_DIR, "pi.png"));
 
-    const openClawIconUrl = getAgentIconUrl("openclaw");
+    const openClawIconUrl = fixture.getAgentIconUrl("openclaw");
     assert.strictEqual(new URL(openClawIconUrl).protocol, "file:");
     assert.strictEqual(
       path.normalize(fileURLToPath(openClawIconUrl)),
-      path.join(AGENT_ICON_DIR, "openclaw.png")
+      path.join(fixture.AGENT_ICON_DIR, "openclaw.png")
     );
-    assert.strictEqual(getAgentIconPath("openclaw"), path.join(AGENT_ICON_DIR, "openclaw.png"));
+    assert.strictEqual(fixture.getAgentIconPath("openclaw"), path.join(fixture.AGENT_ICON_DIR, "openclaw.png"));
   });
 
-  it("has canonical runtime PNG icons for every registered agent", () => {
+  upstreamArtworkTest("has canonical runtime PNG icons for every registered agent", () => {
     const runtimeIconFiles = new Set(
       fs.readdirSync(AGENT_ICON_DIR, { withFileTypes: true })
         .filter(shouldCheckRuntimeIconEntry)
@@ -216,7 +233,7 @@ describe("state agent icons", () => {
     );
   });
 
-  it("has a canonical selected source and provenance record for every registered agent", () => {
+  upstreamArtworkTest("has a canonical selected source and provenance record for every registered agent", () => {
     const manifest = readSourceManifest();
     const registeredIds = getAllAgents().map((agent) => agent.id).sort();
 
@@ -244,7 +261,7 @@ describe("state agent icons", () => {
     );
   });
 
-  it("keeps the generated Grok fallback, its license, and the assets LICENSE aligned", () => {
+  upstreamArtworkTest("keeps the generated Grok fallback, its license, and the assets LICENSE aligned", () => {
     const manifest = readSourceManifest();
     const record = manifest.sources["grok-build"];
     assert.strictEqual(record.license, "CC0-1.0");
@@ -272,7 +289,7 @@ describe("state agent icons", () => {
     assert.match(licenseText, /Except for assets that carry their own explicit license/i);
   });
 
-  it("records complete LobeHub provenance for package and official website assets", () => {
+  upstreamArtworkTest("records complete LobeHub provenance for package and official website assets", () => {
     const manifest = readSourceManifest();
     const selectedLobeHubIds = [
       "antigravity-cli",
@@ -340,16 +357,16 @@ describe("state agent icons", () => {
 
   it("resolves an icon URL for every installable tutorial agent", () => {
     for (const agentId of INSTALLABLE_AGENT_IDS) {
-      const iconUrl = getAgentIconUrl(agentId);
+      const iconUrl = fixture.getAgentIconUrl(agentId);
       assert.ok(iconUrl, `Missing tutorial icon URL for ${agentId}`);
       assert.strictEqual(
         path.normalize(fileURLToPath(iconUrl)),
-        path.join(AGENT_ICON_DIR, `${agentId}.png`),
+        path.join(fixture.AGENT_ICON_DIR, `${agentId}.png`),
       );
     }
   });
 
-  it("keeps runtime agent PNG icons at 64x64", () => {
+  upstreamArtworkTest("keeps runtime agent PNG icons at 64x64", () => {
     for (const entry of fs.readdirSync(AGENT_ICON_DIR, { withFileTypes: true })) {
       if (!shouldCheckRuntimeIconEntry(entry)) continue;
       assert.strictEqual(
@@ -363,7 +380,7 @@ describe("state agent icons", () => {
     }
   });
 
-  it("exports centered RGBA artwork inside the 56x56 safe area", () => {
+  upstreamArtworkTest("exports centered RGBA artwork inside the 56x56 safe area", () => {
     for (const agent of getAllAgents()) {
       const iconPath = path.join(AGENT_ICON_DIR, `${agent.id}.png`);
       const png = decodeRgbaPng(iconPath);
@@ -386,7 +403,7 @@ describe("state agent icons", () => {
     }
   });
 
-  it("keeps every agent identifiable on actual light and dark UI backgrounds", () => {
+  upstreamArtworkTest("keeps every agent identifiable on actual light and dark UI backgrounds", () => {
     const backgrounds = {
       "session HUD dark": [0x20, 0x20, 0x24],
       "dashboard surface-alt dark": [0x18, 0x18, 0x1b],
@@ -407,7 +424,7 @@ describe("state agent icons", () => {
     assert.deepStrictEqual(failures, []);
   });
 
-  it("uses centered neutral tiles only for low-contrast variants", () => {
+  upstreamArtworkTest("uses centered neutral tiles only for low-contrast variants", () => {
     const expected = {
       codex: "neutral-light-tile",
       "copilot-cli": "neutral-light-tile",
@@ -445,7 +462,7 @@ describe("state agent icons", () => {
     assert.strictEqual(centerOffset(64, 35), 14);
   });
 
-  it("preserves approved passthrough icons byte-for-byte", () => {
+  upstreamArtworkTest("preserves approved passthrough icons byte-for-byte", () => {
     const expectedHashes = {
       "kimi-cli": "f2df6353abdcccb3aca6512f04c64c3934a35361b92a0f2e475cdb9f8efe5351",
       qoderwork: "e354f670f8b7310a7bbcb9ca7d313221fb87131aa5d3fef05747718af44b81cf",
@@ -464,7 +481,7 @@ describe("state agent icons", () => {
     }
   });
 
-  it("keeps archived Kimi CLI and QoderWork candidates with original provenance", () => {
+  upstreamArtworkTest("keeps archived Kimi CLI and QoderWork candidates with original provenance", () => {
     const expected = {
       "kimi-cli": [
         { originalFilename: "kimi-color.png", sourceFilename: "kimi-cli.png", sha256: "fb460178c19cd28fc953fb446eb200b4050f4046eae3d84d1a15189eb50f717c" },
@@ -533,7 +550,7 @@ describe("state agent icons", () => {
     );
   });
 
-  it("keeps selected source and SVG hashes aligned with the source manifest", () => {
+  upstreamArtworkTest("keeps selected source and SVG hashes aligned with the source manifest", () => {
     const manifest = readSourceManifest();
     const expectedManifest = updateSourceManifest(
       { sources: {}, svgSources: {}, outputs: manifest.outputs },
@@ -542,7 +559,7 @@ describe("state agent icons", () => {
     assert.deepStrictEqual(readSourceManifest(), expectedManifest);
   });
 
-  it("binds every runtime output to its generated source hash", () => {
+  upstreamArtworkTest("binds every runtime output to its generated source hash", () => {
     const manifest = readSourceManifest();
     const registeredIds = getAllAgents().map((agent) => agent.id).sort();
     assert.deepStrictEqual(Object.keys(manifest.outputs).sort(), registeredIds);

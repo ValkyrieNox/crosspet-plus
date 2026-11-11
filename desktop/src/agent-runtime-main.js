@@ -1024,10 +1024,12 @@ function createAgentRuntimeMain(options = {}) {
           if (planProgressAllowed && existing && !isLocalCodexSessionRecord(existing)) {
             planProgressAllowed = false;
           }
-          if (!sessionOptions.contextUsage && !planProgressAllowed) return false;
+          const commandPreviewAllowed = sessionOptions.commandPreview && existing && isLocalCodexSessionRecord(existing);
+          if (!sessionOptions.contextUsage && !planProgressAllowed && !commandPreviewAllowed) return false;
           if (!stateRuntime || typeof stateRuntime.updateSessionMetadata !== "function") return false;
           return stateRuntime.updateSessionMetadata(sessionId, {
             contextUsage: sessionOptions.contextUsage,
+            ...(commandPreviewAllowed ? { commandPreview: sessionOptions.commandPreview, expectedAgentId: "codex" } : {}),
             ...(planProgressAllowed
               ? {
                 planProgress: sessionOptions.planProgress,

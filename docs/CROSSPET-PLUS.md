@@ -38,7 +38,7 @@ CrossPet 原有角色／换装、自动跟随、单宠互动、多会话忙碌�
 
 审批协议、权限策略、SSH 身份与部署协议、代理集成和功能窗口来自 Clawd，不是本项目重新实现。新增收件箱没有 allow／deny 操作，不提供绕过审批的入口。
 
-本机同一会话被两套 hook 观察时按原始会话 ID 合并；WSL／SSH 会话按 Clawd 的来源身份区分。快照不包含提示词、对话、工具参数、工作路径和凭据。
+本机同一会话被两套 hook 观察时按原始会话 ID 合并；WSL／SSH 会话按 Clawd 的来源身份区分。小终端使用快照中的限长命令摘要、执行状态和短输出，按工具调用及终端会话匹配结果。命令摘要优先保留主要子命令，包管理器脚本去掉冒号后缀，例如 `npm run build:mac` 显示为 `npm run build`，`git status --short` 显示为 `git status`，并省略重定向和后续参数。命令文本在终端边框内裁剪，短输出经过控制字符清理和常见敏感内容过滤。第二行在运行时显示 `Running...`，结束后优先展示可容纳的真实短输出或 pytest、Jest、Vitest、Node 测试统计，例如 `12 passed`。长输出回退为 `Finished` 或 `Failed`。
 
 ## 显示与配置边界
 
@@ -71,7 +71,7 @@ Windows 程序安装在 `%LOCALAPPDATA%\Programs\CrossPet`。CrossPet 数据在 
 
 Mac 的 `CrossPet.app` 内嵌同架构 `CrossPet Plus.app` 后台。原生资源与独立桥接目录位于 `~/Library/Application Support/CrossPet/`，原版 hook 状态仍在 `/tmp/crosspet`。Clawd 配置沿用 `~/Library/Application Support/clawd-on-desk` 和 `~/.clawd`。原版外观设置仅首次导入，已有 Plus 设置优先；不套用 Windows 安装器的配置覆盖迁移。
 
-Mac Plus 不运行上游 `get.sh` 安装器，更新只识别本 fork 对应架构的完整组合包并打开下载页。后台不单独升级；独立 Clawd 占用单实例锁时显示后台错误并等待用户重试，不强杀其他进程。
+Mac Plus 使用本 fork 对应架构的完整组合包更新。点击更新后，先下载并校验版本、架构、组合包组件及代码签名，再自动退出、替换并重新启动；新版启动失败时恢复并重新打开旧版。应用所在目录需要可写，无法写入时保留下载页入口。后台不单独升级；独立 Clawd 占用单实例锁时显示后台错误并等待用户重试，不强杀其他进程。
 
 安装器要求旧应用已退出，备份相关配置和自启动项，完整复制并核对文件数量、字节数和每个文件的 SHA-256，再交换安装目录。旧目录保留，已有早期 CrossPet Plus 安装也保留。迁移只把后台主题改为透明兼容主题、关闭自动审批并开启危险操作提醒；其他偏好与远程配置保留。
 

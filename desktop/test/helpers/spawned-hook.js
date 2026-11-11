@@ -65,6 +65,7 @@ function createSpawnedHookHarness(options = {}) {
     for (const key of [
       "CLAUDE_CONFIG_DIR",
       "CODEX_HOME",
+      "CODEX_INTERNAL_ORIGINATOR_OVERRIDE",
       "COPILOT_HOME",
       "GROK_HOOK_EVENT",
       "HERMES_HOME",

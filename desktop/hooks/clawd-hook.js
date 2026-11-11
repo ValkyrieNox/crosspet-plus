@@ -4,6 +4,7 @@
 // Reads stdin JSON from Claude Code for session_id
 
 const crypto = require("crypto");
+const { commandNameFromInput, buildCommandPreview } = require("./shared-process");
 const fs = require("fs");
 const os = require("os");
 const { postStateToRunningServer, readHostPrefix, resolveWslDistro, applySshRemoteFlag, isRemoteHookRuntime } = require("./server-config");
@@ -736,6 +737,12 @@ function buildStateBody(event, payload, resolve, options = {}) {
     payload.tool_input && typeof payload.tool_input === "object" ? payload.tool_input : null
   );
   if (toolName) body.tool_name = toolName;
+  if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure") {
+    body.command_name = commandNameFromInput(payload.tool_input);
+    const commandPreview = buildCommandPreview(payload.tool_input, event, payload.tool_response,
+      { callId: toolUseId });
+    if (commandPreview) body.command_preview = commandPreview;
+  }
   if (toolUseId) body.tool_use_id = toolUseId;
   if (toolInputFingerprint) body.tool_input_fingerprint = toolInputFingerprint;
   if (event === "PostToolUse" || event === "PostToolUseFailure") {

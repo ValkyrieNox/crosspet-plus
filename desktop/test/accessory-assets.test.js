@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
@@ -132,7 +133,7 @@ function auditCigaretteSmil(source) {
 }
 
 describe("accessory asset audit", () => {
-  it("ships exactly the head and mouth catalogs' local SVG assets with matching viewBoxes", () => {
+  upstreamArtworkTest("ships exactly the head and mouth catalogs' local SVG assets with matching viewBoxes", () => {
     const catalogEntries = [...PET_ACCESSORY_CATALOG, ...PET_MOUTH_ACCESSORY_CATALOG]
       .filter((entry) => entry.id !== "none");
     const catalogAssets = catalogEntries
@@ -158,7 +159,7 @@ describe("accessory asset audit", () => {
     }
   });
 
-  it("contains only inert pixel-vector markup and literal colors", () => {
+  upstreamArtworkTest("contains only inert pixel-vector markup and literal colors", () => {
     for (const file of PET_ACCESSORY_CATALOG.filter((entry) => entry.file).map((entry) => entry.file)) {
       const source = fs.readFileSync(path.join(ASSET_DIR, file), "utf8");
       const markup = source
@@ -180,7 +181,7 @@ describe("accessory asset audit", () => {
     }
   });
 
-  it("allows the cigarette's narrow, bounded SMIL grammar and no active references", () => {
+  upstreamArtworkTest("allows the cigarette's narrow, bounded SMIL grammar and no active references", () => {
     const file = "cigarette.svg";
     const source = fs.readFileSync(path.join(ASSET_DIR, file), "utf8");
     const markup = source
@@ -197,7 +198,7 @@ describe("accessory asset audit", () => {
     auditCigaretteSmil(source);
   });
 
-  it("keeps the archived PR cigarette fragment reproducible as the runtime asset", () => {
+  upstreamArtworkTest("keeps the archived PR cigarette fragment reproducible as the runtime asset", () => {
     const runtime = fs.readFileSync(path.join(ASSET_DIR, "cigarette.svg"), "utf8");
     const archived = fs.readFileSync(
       path.join(__dirname, "..", "assets", "source", "outlaw-pr811", "cigarette-fragment.svg"),
@@ -210,7 +211,7 @@ describe("accessory asset audit", () => {
     assert.strictEqual(withoutComments(archived), withoutComments(runtime));
   });
 
-  it("keeps the archived PR western hat reproducible without replacing the earlier cowboy hat", () => {
+  upstreamArtworkTest("keeps the archived PR western hat reproducible without replacing the earlier cowboy hat", () => {
     const runtime = fs.readFileSync(path.join(ASSET_DIR, "western-cowboy-hat.svg"), "utf8");
     const archived = fs.readFileSync(
       path.join(__dirname, "..", "assets", "source", "outlaw-pr811", "western-cowboy-hat.svg"),
@@ -236,7 +237,7 @@ describe("accessory asset audit", () => {
     assert.throws(() => auditCigaretteSmil(wrap(translate.replace('1 -2', '17 -2'))));
   });
 
-  it("centers the Santa hat by its seating brim rather than its pompom silhouette", () => {
+  upstreamArtworkTest("centers the Santa hat by its seating brim rather than its pompom silhouette", () => {
     const source = fs.readFileSync(
       path.join(ASSET_DIR, "santa-hat.svg"),
       "utf8"
@@ -249,7 +250,7 @@ describe("accessory asset audit", () => {
     assert.strictEqual(centerX, 8, "the seating brim should match the 16-unit canvas center");
   });
 
-  it("renders the angel halo as a smooth, centered elliptical ring", () => {
+  upstreamArtworkTest("renders the angel halo as a smooth, centered elliptical ring", () => {
     const source = fs.readFileSync(path.join(ASSET_DIR, "halo.svg"), "utf8");
     assert.doesNotMatch(source, /shape-rendering="crispEdges"|<rect\b/);
     assert.match(

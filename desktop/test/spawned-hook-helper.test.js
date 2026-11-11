@@ -13,6 +13,29 @@ const {
 const FIXTURE = path.join(__dirname, "fixtures", "spawned-hook", "http-contract.js");
 
 describe("spawned-hook test harness", () => {
+  it("isolates the caller's Codex originator while preserving explicit child overrides", () => {
+    const key = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE";
+    const previous = process.env[key];
+    const harness = createSpawnedHookHarness({ prefix: "spawned-hook-originator-" });
+    const script = path.join(harness.home, "originator.js");
+    fs.writeFileSync(script, `process.stdout.write(JSON.stringify(process.env.${key} ?? null));`);
+    process.env[key] = "caller-desktop";
+    try {
+      const inherited = harness.run({ script });
+      assert.strictEqual(inherited.status, 0, inherited.stderr);
+      assert.strictEqual(JSON.parse(inherited.stdout), null);
+
+      const explicit = harness.run({ script, env: { [key]: "test-desktop" } });
+      assert.strictEqual(explicit.status, 0, explicit.stderr);
+      assert.strictEqual(JSON.parse(explicit.stdout), "test-desktop");
+      assert.strictEqual(process.env[key], "caller-desktop");
+    } finally {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+      harness.cleanup();
+    }
+  });
+
   it("preloads the recorder and permits an expected blocked HTTP attempt", () => {
     const result = runSpawnedHook({
       script: FIXTURE,

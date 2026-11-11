@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamRepositoryTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
@@ -105,7 +106,7 @@ test("only the recognized macOS build module is changed; version/platform mismat
   assert.equal(fs.readFileSync(pkgPath, "utf8"), pkg);
 });
 
-test("the workaround runs only in the Developer ID macOS job before signing", () => {
+upstreamRepositoryTest("the workaround runs only in the Developer ID macOS job before signing", () => {
   const root = path.join(__dirname, "..");
   const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "build.yml"), "utf8")
     .replace(/\r\n?/g, "\n");

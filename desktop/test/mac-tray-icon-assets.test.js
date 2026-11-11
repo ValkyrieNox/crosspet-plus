@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const assert = require("node:assert");
 const crypto = require("node:crypto");
@@ -114,7 +115,7 @@ function sha256(file) {
 }
 
 describe("macOS tray Template assets", () => {
-  it("keeps reproducible project-mark sources and the legacy runtime evidence", () => {
+  upstreamArtworkTest("keeps reproducible project-mark sources and the legacy runtime evidence", () => {
     for (const file of Object.values(SOURCE)) assert.ok(fs.existsSync(file), `${file} should exist`);
     assert.strictEqual(sha256(SOURCE.legacyNormal1x), "e5f1db1525fcbf5f93ad7850f1c0e3b5bc4e71c051b33da0b4e879bf1fc87383");
     assert.strictEqual(sha256(SOURCE.legacyNormal2x), "240bdd4ed812b17fa89b7e856c979082daf1f5f9a3f925108e0ad15554257e12");
@@ -131,7 +132,7 @@ describe("macOS tray Template assets", () => {
     assert.ok(!pkg.build.files.some((entry) => entry.startsWith("assets/source")));
   });
 
-  it("preserves the original logo proportions and a visible center gap", () => {
+  upstreamArtworkTest("preserves the original logo proportions and a visible center gap", () => {
     const source = fs.readFileSync(SOURCE.normal, "utf8");
     assert.match(source, /510x222 union with a 136px \(26\.7%\) center gap/);
     assert.match(source, /scaled to a near-full 18pt menu-bar canvas/);
@@ -146,7 +147,7 @@ describe("macOS tray Template assets", () => {
     }
   });
 
-  it("renders from SVG geometry instead of a duplicated generator constant", () => {
+  upstreamArtworkTest("renders from SVG geometry instead of a duplicated generator constant", () => {
     const source = fs.readFileSync(SOURCE.normal, "utf8");
     const original = parseSvgGeometry(source);
     const widenedSource = source.replace('stroke-width="1.28"', 'stroke-width="1.50"');
@@ -157,7 +158,7 @@ describe("macOS tray Template assets", () => {
     assert.notDeepStrictEqual(renderAlpha(18, original), renderAlpha(18, widened));
   });
 
-  it("uses the near-full canvas without changing the 18pt logical slot", () => {
+  upstreamArtworkTest("uses the near-full canvas without changing the 18pt logical slot", () => {
     for (const [key, file] of Object.entries(RUNTIME)) {
       const image = decodeRgbaPng(file);
       const bounds = alphaBounds(image);
@@ -170,7 +171,7 @@ describe("macOS tray Template assets", () => {
     }
   });
 
-  it("keeps the complete mark geometry and only adds a bounded completion cue", () => {
+  upstreamArtworkTest("keeps the complete mark geometry and only adds a bounded completion cue", () => {
     for (const [normalKey, flashKey] of [["normal1x", "flash1x"], ["normal2x", "flash2x"]]) {
       const normal = decodeRgbaPng(RUNTIME[normalKey]);
       const flash = decodeRgbaPng(RUNTIME[flashKey]);

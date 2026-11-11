@@ -5,6 +5,8 @@ const assert = require("node:assert");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const vm = require("node:vm");
+const { writeRawThemeFixture } = require("./helpers/raw-theme-fixture");
 
 const createTheme = require("../scripts/create-theme");
 
@@ -14,6 +16,23 @@ function makeTmpDir() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clawd-create-theme-"));
   cleanupDirs.push(dir);
   return dir;
+}
+
+function loadScaffoldWithSyntheticTemplate() {
+  const root = makeTmpDir();
+  const template = path.join(root, "themes", "template");
+  const raw = writeRawThemeFixture(template);
+  fs.writeFileSync(path.join(template, "theme.json"), JSON.stringify({ _scaffoldOnly: true, ...raw }, null, 2));
+  fs.copyFileSync(path.join(template, "assets", "fixture-idle-follow.svg"), path.join(template, "assets", "idle-follow.svg"));
+  fs.writeFileSync(path.join(template, "art-source.md"), "Synthetic test assets.\n");
+  fs.writeFileSync(path.join(template, "art-source.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const module = { exports: {} };
+  // The script fixes its template location relative to __dirname. Supply an
+  // isolated repository root while executing the unchanged implementation.
+  vm.runInNewContext(fs.readFileSync(require.resolve("../scripts/create-theme"), "utf8"), {
+    require, module, __dirname: path.join(root, "scripts"), process, console,
+  });
+  return module.exports;
 }
 
 afterEach(() => {
@@ -47,7 +66,7 @@ describe("create-theme defaults", () => {
 describe("create-theme scaffold", () => {
   it("copies the template and patches theme metadata", () => {
     const themesRoot = makeTmpDir();
-    const result = createTheme.createThemeScaffold({
+    const result = loadScaffoldWithSyntheticTemplate().createThemeScaffold({
       themeId: "Pixel Cat",
       name: "Pixel Cat",
       author: "Ruller",
@@ -57,18 +76,22 @@ describe("create-theme scaffold", () => {
     assert.strictEqual(result.themeId, "pixel-cat");
     assert.ok(fs.existsSync(path.join(result.targetDir, "theme.json")));
     assert.ok(fs.existsSync(path.join(result.targetDir, "assets", "idle-follow.svg")));
+    assert.strictEqual(fs.readFileSync(path.join(result.targetDir, "art-source.md"), "utf8"), "Synthetic test assets.\n");
+    assert.ok(fs.existsSync(path.join(result.targetDir, "art-source.svg")));
 
     const themeJson = fs.readFileSync(path.join(result.targetDir, "theme.json"), "utf8");
+    assert.strictEqual(JSON.parse(themeJson).name, "Pixel Cat");
     assert.match(themeJson, /"name": "Pixel Cat"/);
     assert.match(themeJson, /"author": "Ruller"/);
     assert.doesNotMatch(themeJson, /"license"\s*:/);
+    assert.doesNotMatch(themeJson, /"_scaffoldOnly"\s*:/);
   });
 
   it("auto-picks a fresh my-theme-N id when no theme id is provided", () => {
     const themesRoot = makeTmpDir();
     fs.mkdirSync(path.join(themesRoot, "my-theme"), { recursive: true });
 
-    const result = createTheme.createThemeScaffold({
+    const result = loadScaffoldWithSyntheticTemplate().createThemeScaffold({
       themesRoot,
       env: { USERNAME: "Codex" },
     });
@@ -83,7 +106,7 @@ describe("create-theme scaffold", () => {
     fs.mkdirSync(path.join(themesRoot, "pixel-cat"), { recursive: true });
 
     assert.throws(
-      () => createTheme.createThemeScaffold({ themeId: "pixel-cat", themesRoot }),
+      () => loadScaffoldWithSyntheticTemplate().createThemeScaffold({ themeId: "pixel-cat", themesRoot }),
       /already exists/
     );
   });

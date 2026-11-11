@@ -6,6 +6,26 @@ try { ({ screen } = require("electron")); } catch { screen = null; }
 const { isLocalApprovalReminderSession, isTerminalWaitSession } = require("./approval-reminder-session");
 const { mergeCodexClientEphemeral } = require("./codex-session-persistence");
 const { normalizePlanProgress } = require("../hooks/codex-plan-progress");
+const { normalizeCommandPreview } = require("../hooks/shared-process");
+
+function resolveCommandPreview(current, incoming, event) {
+  let next = normalizeCommandPreview(incoming);
+  if (next && !next.label) {
+    next = current?.label && current.sessionId === next.sessionId ? { ...next, label: current.label } : null;
+  }
+  if (["PreToolUse", "BeforeTool", "response_item:function_call"].includes(event)) {
+    if (next) return next;
+    return current || null;
+  }
+  if (["UserPromptSubmit", "SessionStart", "SessionEnd", "event_msg:task_started"].includes(event)) return null;
+  if (["Stop", "AfterAgent", "Interrupt", "StopCancelled", "StopFailure", "event_msg:task_complete", "event_msg:turn_aborted"].includes(event) && current?.status === "running") {
+    return { ...current, status: "finished", output: "" };
+  }
+  if (!next) return current || null;
+  if (current && (current.callId !== next.callId || (!next.callId && current.label !== next.label))) return current;
+  if (current && current.status !== "running" && next.status === "running") return current;
+  return next;
+}
 const {
   createStatePriorityConstants,
   getStatePriority,
@@ -1789,9 +1809,21 @@ function updateSessionMetadata(sessionId, opts = {}) {
   const hasAttachUpdate = Object.hasOwn(opts, "opencodeAttachUrl")
     && opts.opencodeAttachSource === "opencode-plugin" && session.agentId === "opencode"
     && (session.profileId || "local") === "local" && !session.host && !session.wslDistro && !session.headless;
+  const incomingCommandPreview = normalizeCommandPreview(opts.commandPreview);
+  const commandMatches = incomingCommandPreview && session.commandPreview
+    && incomingCommandPreview.callId === session.commandPreview.callId
+    && (incomingCommandPreview.callId || incomingCommandPreview.label === session.commandPreview.label);
   if (!incomingContextUsage && !clearContextUsage && !incomingTitle && !incomingModel
-    && !hasPlanProgress && !hasAttachUpdate) return false;
+    && !hasPlanProgress && !hasAttachUpdate && !commandMatches) return false;
   let applied = false;
+  if (commandMatches) {
+    const preview = resolveCommandPreview(session.commandPreview, incomingCommandPreview);
+    if (JSON.stringify(preview) !== JSON.stringify(session.commandPreview)) {
+      session.commandPreview = preview;
+      session.commandPreviewAt = Date.now();
+      applied = true;
+    }
+  }
   const currentCodexTurnId = codexSessionTurnIds.get(id) || null;
   const planTurnMatches = !!incomingPlanProgressTurnId
     && (!currentCodexTurnId || currentCodexTurnId === incomingPlanProgressTurnId);
@@ -2833,6 +2865,11 @@ function updateSession(sessionId, state, event, opts = {}) {
   );
   const incomingToolName = normalizeToolName(toolName);
   const srcToolName = incomingToolName || (existing && existing.lastToolName) || null;
+  const commandName = typeof opts.commandName === "string" && /^[\p{L}\p{N}_.+-]{1,64}$/u.test(opts.commandName)
+    ? opts.commandName : "";
+  const commandPreview = resolveCommandPreview(existing?.commandPreview, opts.commandPreview, event);
+  const commandPreviewAt = JSON.stringify(commandPreview) !== JSON.stringify(existing?.commandPreview || null)
+    ? Date.now() : existing?.commandPreviewAt || null;
   const srcTranscriptPath = normalizeTranscriptPath(transcriptPath) || (existing && existing.transcriptPath) || null;
   const srcResumeState = existing && existing.resumeState === "executing"
     ? "working" : (existing && existing.resumeState) || null;
@@ -3131,7 +3168,7 @@ function updateSession(sessionId, state, event, opts = {}) {
     opencodeAttachUrl === undefined && existing && existing.opencodeAttachSource === attachSource
       ? existing.opencodeAttachUrl : opencodeAttachUrl
   ) : null;
-  const base = { opencodeAttachUrl: attachUrl, opencodeAttachSource: attachSource, sourcePid: srcPid, wtHwnd: srcWtHwnd, cwd: srcCwd, editor: srcEditor, pidChain: srcPidChain, tmuxSocket: srcTmuxSocket, tmuxClient: srcTmuxClient, orcaPaneKey: srcOrcaPaneKey, herdrPaneId: srcHerdr.herdrPaneId, herdrSocket: srcHerdr.herdrSocket, agentPid: srcAgentPid, agentId: srcAgentId, profileId: (existing && existing.profileId) || profileId || "local", rawSessionId: (existing && existing.rawSessionId) || rawSessionId || sessionId, sessionAutomationIdentity: srcSessionAutomationIdentity, host: srcHost, wslDistro: srcWslDistro, claudeConfigDir: srcClaudeConfigDir, headless: srcHeadless, platform: srcPlatform, model: srcModel, provider: srcProvider, codexOriginator: srcCodexOriginator, codexSource: srcCodexSource, codexClientEphemeral: mergeCodexClientEphemeral(existing, opts), dshCarrier: srcDshCarrier, ghosttyTerminalId: srcGhosttyTerminalId, sessionTitle: srcSessionTitle, sessionTitleFromPrompt: srcSessionTitleFromPrompt, contextUsage: srcContextUsage, contextUsageOrigin: srcContextUsageOrigin, planProgress: srcPlanProgress, planProgressSource: srcPlanProgressSource, metadataUpdatedAt: srcMetadataUpdatedAt, assistantLastOutput: srcAssistantLastOutput, assistantLastOutputTruncated: srcAssistantLastOutputTruncated, lastToolName: srcToolName, transcriptPath: srcTranscriptPath, recentEvents, pidReachable, lastToolBoundaryAt: srcLastToolBoundaryAt, lastStopAt: srcLastStopAt, awaitingInputSinceStop: resolveAwaitingInputSinceStop(existing, event), muteNotificationSound: state === "notification" && muteNotificationSound === true, claudeBackgroundSubagentHoldAt };
+  const base = { opencodeAttachUrl: attachUrl, opencodeAttachSource: attachSource, sourcePid: srcPid, wtHwnd: srcWtHwnd, cwd: srcCwd, editor: srcEditor, pidChain: srcPidChain, tmuxSocket: srcTmuxSocket, tmuxClient: srcTmuxClient, orcaPaneKey: srcOrcaPaneKey, herdrPaneId: srcHerdr.herdrPaneId, herdrSocket: srcHerdr.herdrSocket, agentPid: srcAgentPid, agentId: srcAgentId, profileId: (existing && existing.profileId) || profileId || "local", rawSessionId: (existing && existing.rawSessionId) || rawSessionId || sessionId, sessionAutomationIdentity: srcSessionAutomationIdentity, host: srcHost, wslDistro: srcWslDistro, claudeConfigDir: srcClaudeConfigDir, headless: srcHeadless, platform: srcPlatform, model: srcModel, provider: srcProvider, codexOriginator: srcCodexOriginator, codexSource: srcCodexSource, codexClientEphemeral: mergeCodexClientEphemeral(existing, opts), dshCarrier: srcDshCarrier, ghosttyTerminalId: srcGhosttyTerminalId, sessionTitle: srcSessionTitle, sessionTitleFromPrompt: srcSessionTitleFromPrompt, contextUsage: srcContextUsage, contextUsageOrigin: srcContextUsageOrigin, planProgress: srcPlanProgress, planProgressSource: srcPlanProgressSource, metadataUpdatedAt: srcMetadataUpdatedAt, assistantLastOutput: srcAssistantLastOutput, assistantLastOutputTruncated: srcAssistantLastOutputTruncated, lastToolName: srcToolName, commandName, commandPreview, commandPreviewAt, transcriptPath: srcTranscriptPath, recentEvents, pidReachable, lastToolBoundaryAt: srcLastToolBoundaryAt, lastStopAt: srcLastStopAt, awaitingInputSinceStop: resolveAwaitingInputSinceStop(existing, event), muteNotificationSound: state === "notification" && muteNotificationSound === true, claudeBackgroundSubagentHoldAt };
   // Desktop apps can reopen a previous conversation on launch, so SessionStart
   // only means "opened" — not "used". Any other lifecycle event is a real action
   // and clears the marker. Only the listed agents carry the field; others are

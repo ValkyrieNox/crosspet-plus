@@ -122,13 +122,16 @@ extension App {
     // 一键更新：在后台跑一遍官方安装命令（get.sh：下载最新的 macOS 安装包 → 替换 App → 按新版刷新已接入的 AI → 重新打开），
     // 和用户自己在终端里运行那条命令完全一样，只是不再逐个问要接入哪些 AI。只在装在默认位置（应用程序文件夹）时提供
     var canSelfUpdate: Bool {
-        if isPlus { return false } // The upstream installer would replace the combined app with the original Mac app.
+        if isPlus {
+            let arch = Bundle.main.object(forInfoDictionaryKey: "CrossPetPlusArch") as? String ?? ""
+            return PlusDistribution.assetName(tag: currentVersion, arch: arch) != nil
+                && FileManager.default.isWritableFile(atPath: Bundle.main.bundleURL.deletingLastPathComponent().path)
+        }
         let dir = Bundle.main.bundleURL.deletingLastPathComponent().standardizedFileURL.path
         return dir == "/Applications" || dir == FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").standardizedFileURL.path
     }
 
     @objc func selfUpdate() {
-        if isPlus { openRelease(); return }
         guard !updating, let r = latestRelease else { return }
         let alert = NSAlert()
         alert.messageText = "更新到 \(r.tag)？"
@@ -138,6 +141,8 @@ extension App {
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         updating = true
+        pushSettings()
+        if isPlus { startPlusUpdate(tag: r.tag); return }
         js("setUpdateProgress(0, \(quote("正在下载新版本…")))")
         let logURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/CrossPet-update.log")
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
@@ -183,6 +188,66 @@ extension App {
             }
         }
         do { try p.run() } catch { progressTimer.invalidate(); updating = false; js("endUpdate()"); openRelease() }
+    }
+
+    func startPlusUpdate(tag: String) {
+        let arch = Bundle.main.object(forInfoDictionaryKey: "CrossPetPlusArch") as? String ?? ""
+        guard canSelfUpdate, let asset = PlusDistribution.assetName(tag: tag, arch: arch),
+              let url = URL(string: "https://github.com/\(repoSlug)/releases/download/\(tag)/\(asset)"),
+              let executable = Bundle.main.executableURL else {
+            plusUpdateFailed(PlusUpdateInstaller.failure("无法确定当前架构的完整更新包，或应用所在文件夹无法写入"))
+            return
+        }
+        js("setUpdateProgress(0, \(quote("正在下载新版本…")))")
+        let destination = Bundle.main.bundleURL
+        let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        let parentPid = ProcessInfo.processInfo.processIdentifier
+        URLSession.shared.downloadTask(with: URLRequest(url: url, timeoutInterval: 600)) { [weak self] temporary, response, error in
+            guard let self else { return }
+            do {
+                if let error { throw error }
+                guard let temporary, (response as? HTTPURLResponse)?.statusCode == 200 else {
+                    throw PlusUpdateInstaller.failure("下载失败，服务器未返回完整更新包")
+                }
+                DispatchQueue.main.async { self.js("setUpdateProgress(90, \(self.quote("下载完成，正在检查安装包…")))") }
+                let request = try PlusUpdateInstaller.stage(archive: temporary, destination: destination,
+                    version: version, arch: arch, installer: executable, parentPid: parentPid)
+                DispatchQueue.main.async {
+                    do {
+                        let process = Process()
+                        process.executableURL = request.helper
+                        process.arguments = ["--crosspet-install-update", request.file.path]
+                        process.standardInput = FileHandle.nullDevice
+                        let logURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/CrossPet-update.log")
+                        try FileManager.default.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        if !FileManager.default.fileExists(atPath: logURL.path) { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
+                        let log = try FileHandle(forWritingTo: logURL)
+                        try log.seekToEnd()
+                        process.standardOutput = log
+                        process.standardError = log
+                        try process.run()
+                        self.js("setUpdateProgress(100, \(self.quote("检查完成，正在安装并重启…")))")
+                        NSApp.terminate(nil)
+                    } catch {
+                        try? FileManager.default.removeItem(at: request.workspace)
+                        self.plusUpdateFailed(error)
+                    }
+                }
+            } catch { DispatchQueue.main.async { self.plusUpdateFailed(error) } }
+        }.resume()
+    }
+
+    func plusUpdateFailed(_ error: Error) {
+        updating = false
+        js("endUpdate()")
+        pushSettings()
+        appLog("自动更新失败：\(error.localizedDescription)")
+        let alert = NSAlert()
+        alert.messageText = "自动更新没成功"
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: "好")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     @objc func openRelease() { if let url = latestRelease?.url { NSWorkspace.shared.open(url) } }

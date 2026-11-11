@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkSuite } = require("./helpers/upstream-artifacts");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
@@ -48,7 +49,7 @@ function assertDeclaredTargetsExist(themeId, raw) {
   }
 }
 
-describe("built-in accessory capability contracts", () => {
+upstreamArtworkSuite("built-in accessory capability contracts", () => {
   it("keeps raw metadata and normalized runtime capability aligned", () => {
     for (const [themeId, expected] of [
       ["clawd", true],

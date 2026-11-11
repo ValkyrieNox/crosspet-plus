@@ -294,7 +294,7 @@ let charId = null, pose = null, poseSince = 0, currentUrl = '', swappedAt = 0
 let active = document.getElementById('a'), spare = document.getElementById('b')
 let tucked = null   // 贴边缩着：'left' / 'right'（见「贴边」）
 let tuckedPeek = false   // 缩着时鼠标移上来：探出来、好奇地看着你
-let shownAt = 0, pending = null, thinkTimer = null, revertTimer = null
+let shownAt = 0, pending = null, thinkTimer = null, revertTimer = null, commandResultTimer = null
 let characterGeneration = 0, characterTimer = null, characterTarget = null
 // 这个页面是主桌宠（'main'，默认）还是额外那只（'companion'，外壳 setRole 交来）；roleInfo = { id, key, character, client, label }。
 // 放在最前面：下面不少函数开头要看它（额外那只不做只该做一次的事），有的在脚本加载时就会被调
@@ -357,8 +357,16 @@ function setFx(p, instant, as) {
   const render = () => {
     if (owner !== charId || generation !== characterGeneration || pose !== poseAt || multi) return
     // 角色可以在 character.json 的 fx 里把某个姿态的特效换成 effects.js 里的其他特效，比如 DeepSeek 思考时冒泡泡
-    const named = char()?.fx?.[as || p]
-    const inner = !window.CrossFx || as === 'none' ? '' : named && CrossFx.named?.[named] ? CrossFx.named[named] : CrossFx.surroundings(as || p)
+    const state = charState[charId]
+    const preview = state?.commandPreview
+    const age = Date.now() - Number(state?.commandPreviewAt || state?.ts || 0) * 1000
+    const resultVisible = preview?.label && preview.status !== 'running' && age >= 0 && age < 3000
+    const commandVisible = preview?.label && (preview.status === 'running' || resultVisible) && ['idle', 'listening', 'thinking', 'reading', 'writing', 'running', 'searching', 'delegating', 'happy', 'proud', 'oops'].includes(p)
+    const effect = !as && commandVisible ? 'running' : as || p
+    clearTimeout(commandResultTimer)
+    if (resultVisible) commandResultTimer = characterTimeout(() => setFx(pose, true), 3000 - age)
+    const named = char()?.fx?.[effect]
+    const inner = !window.CrossFx || as === 'none' ? '' : named && CrossFx.named?.[named] ? CrossFx.named[named] : CrossFx.surroundings(effect, state?.commandName, preview)
     fx.innerHTML = inner ? `<svg viewBox="0 0 ${CrossFx.CW} ${CrossFx.CH}" xmlns="http://www.w3.org/2000/svg">${inner}</svg>` : ''
     fx.classList.remove('hide')
   }
@@ -1332,7 +1340,10 @@ function refreshMulti() {
     const bad = kind === 'error' || e.pose === 'oops'
     if (bad && !c.el.classList.contains('error')) c.el.classList.add('error')
     if (!bad) c.el.classList.remove('error')
-    setCardPose(c, kind === 'done' ? 'happy' : e.pose)
+    const resultAge = Date.now() / 1000 - Number(e.commandPreviewAt || e.ts || 0)
+    const resultVisible = e.commandPreview && e.commandPreview.status !== 'running' && resultAge >= 0 && resultAge < 3
+    const commandVisible = e.commandPreview?.label && (e.commandPreview.status === 'running' || resultVisible) && kind !== 'ask'
+    setCardPose(c, commandVisible ? 'running' : kind === 'done' ? 'happy' : e.pose, e.commandName, e.commandPreview)
   })
   const extra = multi.order.length - shown.length
   $('more').textContent = extra > 0 ? `+${extra}` : ''
@@ -1344,15 +1355,15 @@ function refreshMulti() {
   clearTimeout(multi.recheck); multi.recheck = setTimeout(refreshMulti, 1000)
 }
 // 卡片换内容：同一张卡片至少停 1.2 秒，快的工具不会闪
-function setCardPose(c, p) {
-  if (c.pose === p) return
+function setCardPose(c, p, commandName = '', commandPreview = null) {
   clearTimeout(c.pending)
+  if (c.pose === p && c.commandName === commandName && JSON.stringify(c.commandPreview) === JSON.stringify(commandPreview)) return
   const wait = c.shownAt + 1200 - Date.now()
-  if (wait > 0) { c.pending = setTimeout(() => setCardPose(c, p), wait); return }
-  c.pose = p; c.shownAt = Date.now()
+  if (wait > 0) { c.pending = setTimeout(() => setCardPose(c, p, commandName, commandPreview), wait); return }
+  c.pose = p; c.commandName = commandName; c.commandPreview = commandPreview; c.shownAt = Date.now()
   const svg = c.el.querySelector('svg')
   svg.setAttribute('viewBox', `0 0 ${CrossFx.CW} ${CrossFx.CH}`)
-  svg.innerHTML = CrossFx.cardProp(p)
+  svg.innerHTML = CrossFx.cardProp(p, commandName, commandPreview)
   try {   // 只留道具本身：按它实际占的范围裁。沿路径移动的小东西（画画的笔刷）原点在画布角上，量的时候先藏起来
     const moving = [...svg.querySelectorAll('animateMotion')].map(a => a.parentNode)
     moving.forEach(n => n.setAttribute('display', 'none'))
@@ -1461,6 +1472,8 @@ function applyCharState(id, s) {
 }
 function playCharState(id, s) {
   const own = id                      // 事件原本属于哪家 AI：先按它记下状态，切回那家的角色时看到的才是最新的
+  const previousCommand = charState[charId]?.commandName
+  const previousPreview = JSON.stringify(charState[charId]?.commandPreview)
   charState[own] = s
   if (standsIn(id)) id = charId       // 代演（reactTo）：别家 AI 的状态当成她自己的（多个会话同时干活时，由 refreshMulti 合并）
   charState[id] = s
@@ -1469,6 +1482,7 @@ function playCharState(id, s) {
   lastActive = Date.now()
   if (multi) { noteVerdict(own, s, 'multi'); return }   // 正在演多会话：她的样子由各对话的状态决定（refreshMulti），这里不动
   if (Date.now() < shakingUntil && s.event !== 'Stop') { noteVerdict(own, s, 'shaking'); return }
+  if (previousCommand !== s.commandName || previousPreview !== JSON.stringify(s.commandPreview)) setFx(pose, true)
   noteVerdict(own, s, 'shown')   // 正被甩着：先只记下状态，甩停了 resumeWork 回到最新的活上（不然晕和干活来回闪）
   clearTimeout(thinkTimer)
   watchStuck()

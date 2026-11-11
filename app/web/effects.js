@@ -99,15 +99,35 @@ const floatingGlyphs = ['A', 'あ', '{ }', '∑', '文'].map((g, i) =>
 
 
 // 跑命令：右上角小终端，一行行打字
-const terminal = (() => {
-  const x = 430, y = 40
-  const lines = ['$ npm test', '✓ 12 passed', '$ git add .'].map((l, i) =>
-    `<text x="${x + 10}" y="${y + 30 + i * 18}" font-size="14" fill="${i === 1 ? '#7CFC9A' : '#e8e8e8'}" font-family="monospace" opacity="0">${l}<animate attributeName="opacity" values="0;0;1;1" keyTimes="0;${(i * 0.25).toFixed(2)};${(i * 0.25 + 0.05).toFixed(2)};1" dur="3s" ${loop}/></text>`,
-  ).join('')
-  return `<g><rect x="${x}" y="${y}" width="130" height="86" rx="8" fill="#262626" stroke="#fff" stroke-width="3"/>` +
-    `<circle cx="${x + 12}" cy="${y + 11}" r="4" fill="#ff5f56"/><circle cx="${x + 24}" cy="${y + 11}" r="4" fill="#ffbd2e"/><circle cx="${x + 36}" cy="${y + 11}" r="4" fill="#27c93f"/>${lines}` +
-    `</g>`
-})()
+const terminal = (commandName = '', preview = null) => {
+  const x = 396, y = 40
+  const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char])
+  const fit = (value, columns) => {
+    let text = '', width = 0
+    for (const char of value) {
+      const next = char.codePointAt(0) > 255 ? 2 : 1
+      if (width + next > columns) return Array.from(text).slice(0, -1).join('') + '…'
+      text += char; width += next
+    }
+    return text
+  }
+  const name = typeof commandName === 'string' && /^[\p{L}\p{N}_.+-]{1,64}$/u.test(commandName) ? commandName : ''
+  const label = typeof preview?.label === 'string' ? preview.label.slice(0, 64) : name
+  const status = preview?.status || 'running'
+  const output = typeof preview?.output === 'string' ? preview.output : ''
+  const fallback = { running: 'Running...', success: 'Finished', failure: 'Failed', finished: 'Finished' }
+  const color = { failure: '#ff8b8b', running: '#ffd479', success: '#7CFC9A', finished: '#c6cbd1' }[status] || '#c6cbd1'
+  const width = value => Array.from(value).reduce((total, char) => total + (char.codePointAt(0) > 255 ? 2 : 1), 0)
+  const marker = { failure: '✗ ', success: '✓ ', running: '… ' }[status] || ''
+  const shortOutput = !/[\r\n]/.test(output) && width(output) <= 19 ? output : ''
+  const result = status === 'running' ? fallback.running : shortOutput
+    ? (width(marker + shortOutput) <= 19 ? marker + shortOutput : shortOutput) : fallback[status] || 'Finished'
+  return `<g><rect x="${x}" y="${y}" width="164" height="86" rx="8" fill="#262626" stroke="#fff" stroke-width="3"/>` +
+    `<circle cx="${x + 12}" cy="${y + 11}" r="4" fill="#ff5f56"/><circle cx="${x + 24}" cy="${y + 11}" r="4" fill="#ffbd2e"/><circle cx="${x + 36}" cy="${y + 11}" r="4" fill="#27c93f"/>` +
+    `<svg x="${x + 10}" y="${y + 24}" width="144" height="50" overflow="hidden">` +
+    `<text x="0" y="14" font-size="12" fill="#e8e8e8" font-family="monospace">${escape('$ ' + fit(label, 17))}</text>` +
+    `<text x="0" y="40" font-size="12" fill="${color}" font-family="monospace">${escape(fit(result, 19))}</text></svg></g>`
+}
 
 const magnifier = `<g><circle r="22" fill="#cfefff" fill-opacity="0.55" stroke="${INK}" stroke-width="5"/><circle cx="-7" cy="-7" r="6" fill="#fff" opacity="0.8"/><path d="M15 15 L34 34" stroke="#8b5a2b" stroke-width="8" stroke-linecap="round"/>` +
   `<animateMotion path="M470 120 a40 26 0 1 1 1 0" dur="2.6s" ${loop}/></g>`
@@ -566,7 +586,7 @@ Object.assign(AURA, {
 })
 
 // 每个姿态周围的细节
-const surroundings = (p      )         => {
+const surroundings = (p, commandName = '', commandPreview = null)         => {
   switch (p) {
     case 'idle': return star(80, 180, 0.6, '0s', '#ffc58a', '3s') + star(500, 260, 0.5, '1.5s', '#ffc58a', '3s')
     case 'listening': return chatCard
@@ -575,7 +595,7 @@ const surroundings = (p      )         => {
     case 'thinking': return thoughtCloud
     case 'reading': return viewerCard + floatingGlyphs
     case 'writing': return editorCard
-    case 'running': return terminal
+    case 'running': return terminal(commandName, commandPreview)
     case 'searching': return magnifier + browser
     case 'delegating': return taskCard  // 子任务依次完成；「派出分身」交给立绘表现
     case 'happy': return checklist + confetti + star(500, 170, 1, '0.5s') + star(548, 392, 0.9, '0.3s')
@@ -609,13 +629,13 @@ const sceneSvg = (art     , p      )         => {
 }
 
 // 多会话的小卡片：每个对话正在做的事只取主要的那个道具（不带星星、彩带这些散在四周的点缀），网页裁好放进桌宠两侧
-const cardProp = (p      )         => {
+const cardProp = (p, commandName = '', commandPreview = null)         => {
   switch (p) {
     case 'listening': return chatCard
     case 'asking': return choiceCard
     case 'reading': return viewerCard
     case 'writing': case 'compact': return editorCard
-    case 'running': return terminal
+    case 'running': return terminal(commandName, commandPreview)
     case 'searching': return browser
     case 'delegating': return taskCard
     case 'drawing': return easelCard

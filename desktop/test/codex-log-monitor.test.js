@@ -64,6 +64,87 @@ describe("CodexLogMonitor", () => {
     monitor.start();
   });
 
+  it("updates the command label on consecutive shell calls", (_, done) => {
+    const calls = ["curl --version", "ssh user@host"].map(cmd => ({
+      type: "response_item", payload: { type: "function_call", name: "exec_command", arguments: JSON.stringify({ cmd }) },
+    }));
+    fs.writeFileSync(path.join(dateDir, TEST_FILENAME), [
+      { type: "session_meta", payload: { cwd: "/tmp" } }, ...calls,
+    ].map(row => JSON.stringify(row)).join("\n") + "\n");
+    const labels = [];
+    monitor = new CodexLogMonitor(makeConfig(tmpDir), (sid, state, event, extra) => {
+      if (extra?.commandName) labels.push(extra.commandName);
+    });
+    monitor.start();
+    setTimeout(() => {
+      assert.deepStrictEqual(labels, ["curl", "ssh"]);
+      done();
+    }, 100);
+  });
+
+  it("correlates shell output to the newest bounded command preview", (_, done) => {
+    const records = [
+      { type: "session_meta", payload: { cwd: "/tmp" } },
+      ...["older", "current"].map(call_id => ({ type: "response_item", payload: {
+        type: "function_call", name: "exec_command", call_id,
+        arguments: JSON.stringify({ cmd: "npm run build > test.log" }),
+      } })),
+      { type: "response_item", payload: { type: "function_call_output", call_id: "older", output: { exit_code: 1, stdout: "old failure" } } },
+      { type: "event_msg", payload: { type: "exec_command_end", call_id: "current", exit_code: 0, aggregated_output: "Build complete" } },
+      { type: "response_item", payload: { type: "function_call_output", call_id: "current", output: { stdout: "Unresolved" } } },
+    ];
+    fs.writeFileSync(path.join(dateDir, TEST_FILENAME), records.map(row => JSON.stringify(row)).join("\n") + "\n");
+    const previews = [];
+    monitor = new CodexLogMonitor(makeConfig(tmpDir), (sid, state, event, extra) => {
+      if (extra?.commandPreview) previews.push({ state, event, ...extra.commandPreview });
+    });
+    monitor.start();
+    setTimeout(() => {
+      assert.strictEqual(previews.length, 4);
+      assert.ok(previews.every(preview => preview.label === "npm run build"));
+      assert.strictEqual(previews[2].status, "success");
+      assert.strictEqual(previews[2].output, "Build complete");
+      assert.strictEqual(previews[2].state, "working");
+      assert.strictEqual(previews[2].callId, "current");
+      assert.strictEqual(previews[3].status, "finished");
+      assert.strictEqual(previews[3].output, "Unresolved");
+      done();
+    }, 100);
+  });
+
+  it("forwards yielded shell sessions through write_stdin completion", (_, done) => {
+    const records = [
+      { type: "session_meta", payload: { cwd: "/tmp" } },
+      { type: "response_item", payload: { type: "function_call", name: "exec_command", call_id: "start", arguments: JSON.stringify({ cmd: "npm run build" }) } },
+      { type: "response_item", payload: { type: "function_call_output", call_id: "start", output: { session_id: 42, exit_code: null, stdout: "Building" } } },
+      { type: "response_item", payload: { type: "function_call", name: "read_file", call_id: "read", arguments: JSON.stringify({ path: "/repo/package.json" }) } },
+      { type: "response_item", payload: { type: "function_call_output", call_id: "start", output: { session_id: 42, stdout: "Still building" } } },
+      { type: "response_item", payload: { type: "function_call", name: "write_stdin", call_id: "poll", arguments: JSON.stringify({ session_id: 42, chars: "" }) } },
+      { type: "response_item", payload: { type: "function_call_output", call_id: "poll", output: { exit_code: 0, stdout: "Build complete" } } },
+    ];
+    fs.writeFileSync(path.join(dateDir, TEST_FILENAME), records.map(row => JSON.stringify(row)).join("\n") + "\n");
+    const previews = [];
+    monitor = new CodexLogMonitor(makeConfig(tmpDir), (sid, state, event, extra) => {
+      if (extra?.commandPreview) previews.push(extra.commandPreview);
+    });
+    monitor.start();
+    setTimeout(() => {
+      assert.strictEqual(previews.length, 5);
+      assert.strictEqual(previews[1].label, "npm run build");
+      assert.strictEqual(previews[1].status, "running");
+      assert.strictEqual(previews[1].sessionId, "42");
+      assert.strictEqual(previews[2].callId, "start");
+      assert.strictEqual(previews[2].output, "Still building");
+      assert.strictEqual(previews[3].label, "");
+      assert.strictEqual(previews[3].sessionId, "42");
+      assert.strictEqual(previews[4].callId, "poll");
+      assert.strictEqual(previews[4].sessionId, "42");
+      assert.strictEqual(previews[4].status, "success");
+      assert.strictEqual(previews[4].output, "Build complete");
+      done();
+    }, 100);
+  });
+
   it("extracts the parent thread from a Codex Desktop turn-suffixed rollout filename", () => {
     const testFile = path.join(dateDir, DESKTOP_TURN_FILENAME);
     fs.writeFileSync(testFile, JSON.stringify({

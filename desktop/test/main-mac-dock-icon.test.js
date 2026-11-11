@@ -1,3 +1,4 @@
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 const test = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -106,7 +107,7 @@ test("main wires startup Dock icon behavior through the shared runtime helper", 
   );
 });
 
-test("dock icon is padded to the macOS grid, not full-bleed (issue #416 Part B)", () => {
+upstreamArtworkTest("dock icon is padded to the macOS grid, not full-bleed (issue #416 Part B)", () => {
   const { canvas, width, height } = alphaContentBBox(DOCK_ICON);
   assert.equal(canvas, 1024, "dock icon canvas should be 1024px");
   // Apple grid target is 824/1024 = 80.5%. Guard against a full-bleed regression
@@ -121,7 +122,7 @@ test("dock icon is padded to the macOS grid, not full-bleed (issue #416 Part B)"
   );
 });
 
-test("full-bleed dock icon source is preserved for regeneration", () => {
+upstreamArtworkTest("full-bleed dock icon source is preserved for regeneration", () => {
   assert.ok(
     fs.existsSync(DOCK_ICON_SOURCE),
     "assets/source/dock-icon-fullbleed.png should exist as the regeneration source"

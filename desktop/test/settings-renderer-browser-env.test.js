@@ -4645,7 +4645,10 @@ describe("settings renderer browser environment", () => {
     assert.ok(addButton);
     addButton.dispatchEvent({ type: "click" });
 
-    const transportPicker = harness.content.querySelectorAll(".settings-select")[0];
+    const transportPicker = harness.content.querySelectorAll(".settings-select")
+      .find((picker) => picker.parentNode.querySelector(".remote-ssh-field-label")
+        .textContent === "SSH transport compatibility");
+    assert.ok(transportPicker, "the SSH transport compatibility picker should exist");
     assert.equal(getSelectedPickerValue(transportPicker), "auto");
     choosePickerOption(transportPicker, "serialized");
     const portPicker = harness.content.querySelector(".remote-ssh-port-select");

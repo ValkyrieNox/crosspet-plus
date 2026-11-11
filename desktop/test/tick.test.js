@@ -1,13 +1,13 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const { describe, it, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert");
-const path = require("node:path");
 
-const themeLoader = require("../src/theme-loader");
 const { resolveIdleVisualChoice } = require("../src/idle-visual");
-themeLoader.init(path.join(__dirname, "..", "src"));
-const _defaultTheme = themeLoader.loadTheme("clawd");
+
+const _defaultTheme = createRuntimeTheme("clawd");
 
 function cloneTheme(theme) {
   return JSON.parse(JSON.stringify(theme));
@@ -671,7 +671,7 @@ describe("tick eye tracking preference (#1276)", () => {
   });
 
   it("resends the Cloudling pointer after disabling and re-enabling without cursor movement", () => {
-    const theme = cloneTheme(themeLoader.loadTheme("cloudling"));
+    const theme = cloneTheme(createRuntimeTheme("cloudling"));
     const channels = { eyeMoves: [], pointers: [] };
 
     pointerAwareCtx(theme, channels);

@@ -1,10 +1,9 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const { describe, it, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const loader = require("../src/theme-loader");
-loader.init(path.join(__dirname, "..", "src"));
 
 describe("Codex compaction across desktop conversations", () => {
   let state, ctx, calls, theme, processAlive;
@@ -13,7 +12,7 @@ describe("Codex compaction across desktop conversations", () => {
   const noop = () => {};
   beforeEach(() => {
     mock.timers.enable({ apis: ["setTimeout", "Date"] });
-    theme = structuredClone(loader.loadTheme("clawd"));
+    theme = structuredClone(createRuntimeTheme("clawd"));
     calls = [];
     processAlive = true;
     ctx = { theme, doNotDisturb: false, miniMode: false, miniTransitioning: false,

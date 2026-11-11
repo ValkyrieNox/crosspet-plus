@@ -15,11 +15,12 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
-const { describe, it, afterEach } = require("node:test");
+const { describe, it, beforeEach, afterEach } = require("node:test");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const SCRIPT_PATH = path.join(REPO_ROOT, "scripts", "validate-theme.js");
-const CALICO = path.join(REPO_ROOT, "themes", "calico");
+const { writeRawThemeFixture } = require("./helpers/raw-theme-fixture");
+let fixtureTheme;
 
 const tempDirs = [];
 
@@ -45,6 +46,11 @@ function mkTempThemeDir() {
   return dir;
 }
 
+beforeEach(() => {
+  fixtureTheme = mkTempThemeDir();
+  writeRawThemeFixture(fixtureTheme);
+});
+
 afterEach(() => {
   while (tempDirs.length) {
     // Per-entry try/catch: a lingering handle on one directory (Windows) must not
@@ -60,12 +66,12 @@ afterEach(() => {
 describe("validate-theme.js CLI (real process, spawnSync)", () => {
   it("checks optional idle visual files and warns without invalidating the theme", () => {
     const dir = mkTempThemeDir();
-    const raw = JSON.parse(fs.readFileSync(path.join(CALICO, "theme.json"), "utf8"));
+    const raw = JSON.parse(fs.readFileSync(path.join(fixtureTheme, "theme.json"), "utf8"));
     raw.idleVisualOptions = [{ file: "pool.apng" }, { file: "missing.apng" }, {}, { file: 23 }];
     raw.variantsSchemaVersion = 0;
     raw.variants = { lounge: { idleVisualOptions: [{ file: "variant-missing.apng" }] } };
     fs.writeFileSync(path.join(dir, "theme.json"), JSON.stringify(raw), "utf8");
-    fs.cpSync(path.join(CALICO, "assets"), path.join(dir, "assets"), { recursive: true });
+    fs.cpSync(path.join(fixtureTheme, "assets"), path.join(dir, "assets"), { recursive: true });
     fs.writeFileSync(path.join(dir, "assets", "pool.apng"), "image", "utf8");
     const result = runValidateTheme([dir]);
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
@@ -78,15 +84,15 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
 
   it("checks every file of a tier files pool and flags a malformed pool", () => {
     const dir = mkTempThemeDir();
-    const raw = JSON.parse(fs.readFileSync(path.join(CALICO, "theme.json"), "utf8"));
+    const raw = JSON.parse(fs.readFileSync(path.join(fixtureTheme, "theme.json"), "utf8"));
     raw.workingTiers[0] = {
       minSessions: raw.workingTiers[0].minSessions,
-      file: "calico-working-typing.apng",
-      files: ["calico-working-building.apng", "pool-missing.apng"],
+      file: "fixture-working-typing.apng",
+      files: ["fixture-working-building.apng", "pool-missing.apng"],
     };
     raw.jugglingTiers[0] = { minSessions: raw.jugglingTiers[0].minSessions, files: [] };
     fs.writeFileSync(path.join(dir, "theme.json"), JSON.stringify(raw), "utf8");
-    fs.cpSync(path.join(CALICO, "assets"), path.join(dir, "assets"), { recursive: true });
+    fs.cpSync(path.join(fixtureTheme, "assets"), path.join(dir, "assets"), { recursive: true });
     const result = runValidateTheme([dir]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stdout, /Missing asset: pool-missing\.apng/);
@@ -97,14 +103,14 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
 
   it("accepts a valid tier files pool and warns when file is left out of it", () => {
     const dir = mkTempThemeDir();
-    const raw = JSON.parse(fs.readFileSync(path.join(CALICO, "theme.json"), "utf8"));
+    const raw = JSON.parse(fs.readFileSync(path.join(fixtureTheme, "theme.json"), "utf8"));
     raw.workingTiers[0] = {
       minSessions: raw.workingTiers[0].minSessions,
-      file: "calico-working-typing.apng",
-      files: ["calico-working-building.apng", "calico-working-juggling.apng"],
+      file: "fixture-working-typing.apng",
+      files: ["fixture-working-building.apng", "fixture-working-juggling.apng"],
     };
     fs.writeFileSync(path.join(dir, "theme.json"), JSON.stringify(raw), "utf8");
-    fs.cpSync(path.join(CALICO, "assets"), path.join(dir, "assets"), { recursive: true });
+    fs.cpSync(path.join(fixtureTheme, "assets"), path.join(dir, "assets"), { recursive: true });
     const result = runValidateTheme([dir]);
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /workingTiers\[0\]: "file" is ignored next to "files"/);
@@ -136,7 +142,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // the override unset and every check ran against the DEFAULT assets path, so
     // a malformed command could reach exit 0 and call the theme valid. A real
     // theme dir is passed as [0] so the flag is the only broken thing.
-    const result = runValidateTheme([CALICO, "--assets"]);
+    const result = runValidateTheme([fixtureTheme, "--assets"]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /--assets requires a directory argument/);
   });
@@ -144,7 +150,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
   it("--assets given an empty value is refused", () => {
     // Same silent-drop class as above, by a different route: "" is falsy, so the
     // old parser skipped it and reported the theme as valid (measured: exit 0).
-    const result = runValidateTheme([CALICO, "--assets", ""]);
+    const result = runValidateTheme([fixtureTheme, "--assets", ""]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /--assets requires a directory argument/);
   });
@@ -154,7 +160,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // can begin with "-", and the filesystem is what knows whether this one
     // exists. What matters is that it fails and quotes the string it was given,
     // so the author sees their own typo rather than a theme verdict.
-    const result = runValidateTheme([CALICO, "--assets", "--verbose"]);
+    const result = runValidateTheme([fixtureTheme, "--assets", "--verbose"]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /--assets directory not found/);
     assert.match(result.stderr, /--verbose/);
@@ -163,8 +169,8 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
   it("--assets given more than once is refused", () => {
     // Last-one-wins silently discarded the earlier value, which is the same
     // "ran against a path you did not ask for" failure as the others here.
-    const assets = path.join(CALICO, "assets");
-    const result = runValidateTheme([CALICO, "--assets", assets, "--assets", assets]);
+    const assets = path.join(fixtureTheme, "assets");
+    const result = runValidateTheme([fixtureTheme, "--assets", assets, "--assets", assets]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /--assets given more than once/);
   });
@@ -173,7 +179,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // Previously fell through the loop untouched (themeDir was already set), so
     // the run continued with default settings and exited 0 -- the flag the caller
     // typed had no effect and nothing said so.
-    const result = runValidateTheme([CALICO, "--verbose"]);
+    const result = runValidateTheme([fixtureTheme, "--verbose"]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /Unknown option: --verbose/);
   });
@@ -181,7 +187,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
   it("a surplus positional argument is refused, not ignored", () => {
     // Same silent-drop: a second theme path was accepted and discarded, so
     // validating two themes in one command quietly validated only the first.
-    const result = runValidateTheme([CALICO, path.join(REPO_ROOT, "themes", "clawd")]);
+    const result = runValidateTheme([fixtureTheme, path.join(REPO_ROOT, "themes", "clawd")]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /Unexpected extra argument/);
   });
@@ -192,7 +198,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // A sibling of a real temp dir, never created, so the only broken thing is
     // the override path.
     const missing = path.join(mkTempThemeDir(), "does-not-exist");
-    const result = runValidateTheme([CALICO, "--assets", missing]);
+    const result = runValidateTheme([fixtureTheme, "--assets", missing]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /--assets directory not found/);
   });
@@ -201,7 +207,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // Measured on the previous behavior: this produced a 27-error report about
     // the theme, because every asset lookup under a non-directory missed. The
     // theme was fine; the path was not.
-    const result = runValidateTheme([CALICO, "--assets", path.join(CALICO, "theme.json")]);
+    const result = runValidateTheme([fixtureTheme, "--assets", path.join(fixtureTheme, "theme.json")]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /--assets path is not a directory/);
     assert.doesNotMatch(result.stdout, /error\(s\)/);
@@ -219,7 +225,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
   }, () => {
     // ENOTDIR, not ENOENT. Collapsing every stat failure into "not found" tells
     // the author to create a directory that cannot exist at that path.
-    const result = runValidateTheme([CALICO, "--assets", path.join(CALICO, "theme.json", "nope")]);
+    const result = runValidateTheme([fixtureTheme, "--assets", path.join(fixtureTheme, "theme.json", "nope")]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
     assert.match(result.stderr, /cannot be accessed \(ENOTDIR\)/);
     assert.doesNotMatch(result.stderr, /not found/);
@@ -247,11 +253,11 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
   it("malformed objectChannelFiles produces a normal validation report instead of crashing", () => {
     for (const objectChannelFiles of [[42], 42, {}]) {
       const dir = mkTempThemeDir();
-      const raw = JSON.parse(fs.readFileSync(path.join(CALICO, "theme.json"), "utf8"));
+      const raw = JSON.parse(fs.readFileSync(path.join(fixtureTheme, "theme.json"), "utf8"));
       raw.schemaVersion = 2;
       raw.rendering = { ...(raw.rendering || {}), objectChannelFiles };
       fs.writeFileSync(path.join(dir, "theme.json"), JSON.stringify(raw), "utf8");
-      fs.cpSync(path.join(CALICO, "assets"), path.join(dir, "assets"), { recursive: true });
+      fs.cpSync(path.join(fixtureTheme, "assets"), path.join(dir, "assets"), { recursive: true });
 
       const result = runValidateTheme([dir]);
       assert.strictEqual(result.status, 1, result.stderr || result.stdout);
@@ -264,11 +270,11 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
   it("malformed discreteSampling produces a normal validation report instead of crashing", () => {
     for (const discreteSampling of [[42], 42, { "animated.svg": "24" }]) {
       const dir = mkTempThemeDir();
-      const raw = JSON.parse(fs.readFileSync(path.join(CALICO, "theme.json"), "utf8"));
+      const raw = JSON.parse(fs.readFileSync(path.join(fixtureTheme, "theme.json"), "utf8"));
       raw.schemaVersion = 2;
       raw.rendering = { ...(raw.rendering || {}), discreteSampling };
       fs.writeFileSync(path.join(dir, "theme.json"), JSON.stringify(raw), "utf8");
-      fs.cpSync(path.join(CALICO, "assets"), path.join(dir, "assets"), { recursive: true });
+      fs.cpSync(path.join(fixtureTheme, "assets"), path.join(dir, "assets"), { recursive: true });
 
       const result = runValidateTheme([dir]);
       assert.strictEqual(result.status, 1, result.stderr || result.stdout);
@@ -377,8 +383,8 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // Refusing unknown options must not make a legal directory name unreachable.
     // Relative, from a cwd we control, so the leading "-" is really in argv.
     const parent = mkTempThemeDir();
-    fs.cpSync(path.join(CALICO, "assets"), path.join(parent, "-dashed", "assets"), { recursive: true });
-    const result = runValidateTheme([CALICO, "--assets", "-dashed/assets"], { cwd: parent });
+    fs.cpSync(path.join(fixtureTheme, "assets"), path.join(parent, "-dashed", "assets"), { recursive: true });
+    const result = runValidateTheme([fixtureTheme, "--assets", "-dashed/assets"], { cwd: parent });
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
   });
 
@@ -387,7 +393,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // an unknown option, and the message points at "--" -- asserted here so the
     // escape hatch cannot be removed without a test noticing.
     const parent = mkTempThemeDir();
-    fs.cpSync(CALICO, path.join(parent, "-dashed-theme"), { recursive: true });
+    fs.cpSync(fixtureTheme, path.join(parent, "-dashed-theme"), { recursive: true });
     const viaSeparator = runValidateTheme(["--", "-dashed-theme"], { cwd: parent });
     assert.strictEqual(viaSeparator.status, 0, viaSeparator.stderr || viaSeparator.stdout);
 
@@ -405,7 +411,7 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     // 24 cases green. Point a VALID, existing, EMPTY directory at a theme whose
     // own assets/ is complete: only an honoured override can make it miss.
     const empty = mkTempThemeDir();
-    const redirected = runValidateTheme([CALICO, "--assets", empty]);
+    const redirected = runValidateTheme([fixtureTheme, "--assets", empty]);
     assert.strictEqual(redirected.status, 1, redirected.stderr || redirected.stdout);
     // Ordinary missing-asset findings, not a setup error: the path is a perfectly
     // good directory, it simply has nothing in it.
@@ -413,54 +419,52 @@ describe("validate-theme.js CLI (real process, spawnSync)", () => {
     assert.ok(errorCount(redirected.stdout) > 0, redirected.stdout);
     // ...and the same theme without the override is clean, so the override is the
     // only thing that changed.
-    assert.strictEqual(runValidateTheme([CALICO]).status, 0);
+    assert.strictEqual(runValidateTheme([fixtureTheme]).status, 0);
   });
 
   it("control: a well-formed --assets override still validates clean", () => {
     // The strict parser must not break the documented usage it is guarding.
-    const result = runValidateTheme([CALICO, "--assets", path.join(CALICO, "assets")]);
+    const result = runValidateTheme([fixtureTheme, "--assets", path.join(fixtureTheme, "assets")]);
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
   });
 
-  it("control: a real, shipped, valid theme validates clean", () => {
-    // themes/calico rather than a hand-built fixture: assembling a theme.json
-    // that clears every rule (required states, sleepSequence, eye-tracking SVG
-    // ids, asset existence) would just re-derive a shipped theme. calico is
-    // git-tracked and has its own assets/, so this exercises the full pass.
-    const result = runValidateTheme([CALICO]);
+  it("control: a complete synthetic theme validates clean", () => {
+    // Exercise schema, sleep states, SVG tracking IDs and asset existence
+    // independently of the artwork shipped by a particular distribution.
+    const result = runValidateTheme([fixtureTheme]);
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
   });
 });
 
 describe("issue #1323: dark appearance validation", () => {
-  function copyCalicoWithDark() {
+  function copyFixtureWithDark() {
     const dir = mkTempThemeDir();
-    const raw = JSON.parse(fs.readFileSync(path.join(CALICO, "theme.json"), "utf8"));
+    const raw = JSON.parse(fs.readFileSync(path.join(fixtureTheme, "theme.json"), "utf8"));
     raw.appearance = { dark: { assetsDir: "assets-dark" } };
     fs.writeFileSync(path.join(dir, "theme.json"), JSON.stringify(raw), "utf8");
-    fs.cpSync(path.join(CALICO, "assets"), path.join(dir, "assets"), { recursive: true });
-    fs.cpSync(path.join(CALICO, "assets"), path.join(dir, "assets-dark"), { recursive: true });
+    fs.cpSync(path.join(fixtureTheme, "assets"), path.join(dir, "assets"), { recursive: true });
+    fs.cpSync(path.join(fixtureTheme, "assets"), path.join(dir, "assets-dark"), { recursive: true });
     return dir;
   }
 
   it("issue #1323: accepts a complete dark mirror", () => {
-    const result = runValidateTheme([copyCalicoWithDark()]);
+    const result = runValidateTheme([copyFixtureWithDark()]);
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /dark assets: complete mirror/);
   });
 
   it("issue #1323: rejects a dark directory missing a mirrored file", () => {
-    const dir = copyCalicoWithDark();
-    fs.rmSync(path.join(dir, "assets-dark", "calico-idle.apng"), { force: true });
+    const dir = copyFixtureWithDark();
+    fs.rmSync(path.join(dir, "assets-dark", "fixture-idle.apng"), { force: true });
     const result = runValidateTheme([dir]);
     assert.strictEqual(result.status, 1, result.stderr || result.stdout);
-    assert.match(result.stdout, /dark assets: assets-dark\/ is missing calico-idle\.apng/);
+    assert.match(result.stdout, /dark assets: assets-dark\/ is missing fixture-idle\.apng/);
   });
 
   it("issue #1323: rejects a dark SVG that references a missing raster", () => {
-    const dir = copyCalicoWithDark();
+    const dir = copyFixtureWithDark();
     fs.writeFileSync(
-      path.join(dir, "assets-dark", "calico-idle-follow.svg"),
+      path.join(dir, "assets-dark", "fixture-idle-follow.svg"),
       '<svg xmlns="http://www.w3.org/2000/svg"><image href="missing.png"/></svg>',
       "utf8"
     );
@@ -470,9 +474,9 @@ describe("issue #1323: dark appearance validation", () => {
   });
 
   it("issue #1323: ignores raster references inside content that sanitization removes", () => {
-    const dir = copyCalicoWithDark();
+    const dir = copyFixtureWithDark();
     fs.writeFileSync(
-      path.join(dir, "assets-dark", "calico-idle-follow.svg"),
+      path.join(dir, "assets-dark", "fixture-idle-follow.svg"),
       '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><image href="missing.png"/></foreignObject></svg>',
       "utf8"
     );

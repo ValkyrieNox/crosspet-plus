@@ -1,5 +1,7 @@
 "use strict";
 
+const { createRuntimeTheme } = require("./helpers/runtime-theme");
+
 const { it } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,7 +10,6 @@ const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const CodexLogMonitor = require("../agents/codex-log-monitor");
 const createRuntime = require("../src/agent-runtime-main");
-const themeLoader = require("../src/theme-loader");
 const { resolveSessionIdentity } = require("../src/session-key");
 const { buildStateBody } = require("../hooks/codex-hook");
 const { handleStatePost } = require("../src/server-route-state");
@@ -21,8 +22,8 @@ const noop = () => {};
 
 function harness(t, overrides = {}, minDisplay = {}) {
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"] });
-  themeLoader.init(path.join(__dirname, "..", "src"));
-  const theme = structuredClone(themeLoader.loadTheme("clawd"));
+
+  const theme = structuredClone(createRuntimeTheme("clawd"));
   theme.timings.minDisplay = minDisplay;
   theme.timings.autoReturn = { attention: 5, "mini-happy": 5 };
   const sounds = [], flashes = [], visuals = [];

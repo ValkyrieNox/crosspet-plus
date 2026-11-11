@@ -1,3 +1,5 @@
+const { skipUpstreamFile } = require("./helpers/upstream-artifacts");
+if (skipUpstreamFile('upstream winget publication workflow', 'Plus ships native combined archives and has no upstream winget workflow')) return;
 const assert = require("node:assert");
 const fs = require("node:fs");
 const os = require("node:os");

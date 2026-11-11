@@ -1,8 +1,7 @@
+const { createGeometryTheme } = require("./helpers/runtime-theme");
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
-const path = require("path");
 
-const themeLoader = require("../src/theme-loader");
 const hitGeometry = require("../src/hit-geometry");
 const {
   getThemeMarginBox,
@@ -13,13 +12,11 @@ const {
   getRestClampMargins,
 } = require("../src/visible-margins");
 
-themeLoader.init(path.join(__dirname, "..", "src"));
-
 describe("visible margin envelopes", () => {
   const bounds = { x: 0, y: 0, width: 280, height: 280 };
 
   it("prefers layout.marginBox over contentBox when present", () => {
-    const clawd = themeLoader.loadTheme("clawd");
+    const clawd = createGeometryTheme("clawd");
     assert.deepStrictEqual(getThemeMarginBox(clawd), clawd.layout.marginBox);
 
     const idleFile = clawd.states.idle[0];
@@ -38,7 +35,7 @@ describe("visible margin envelopes", () => {
   });
 
   it("collects a non-mini envelope file set", () => {
-    const clawd = themeLoader.loadTheme("clawd");
+    const clawd = createGeometryTheme("clawd");
     const files = collectThemeEnvelopeFiles(clawd);
 
     assert.ok(files.includes("clawd-working-typing.svg"));
@@ -48,7 +45,7 @@ describe("visible margin envelopes", () => {
   });
 
   it("uses the minimum top and bottom margins across a theme envelope", () => {
-    const calico = themeLoader.loadTheme("calico");
+    const calico = createGeometryTheme("calico");
     const files = collectThemeEnvelopeFiles(calico);
     const expected = files.reduce((acc, file) => {
       const rect = hitGeometry.getContentRectScreen(calico, bounds, null, file, {
@@ -72,7 +69,7 @@ describe("visible margin envelopes", () => {
   });
 
   it("builds the update anchor from marginBox and the idle file", () => {
-    const clawd = themeLoader.loadTheme("clawd");
+    const clawd = createGeometryTheme("clawd");
     const expected = hitGeometry.getContentRectScreen(clawd, bounds, "idle", clawd.states.idle[0], {
       box: clawd.layout.marginBox,
     });
@@ -81,7 +78,7 @@ describe("visible margin envelopes", () => {
   });
 
   it("prefers updateBubbleAnchorBox over layout-derived boxes when present", () => {
-    const clawd = structuredClone(themeLoader.loadTheme("clawd"));
+    const clawd = structuredClone(createGeometryTheme("clawd"));
     clawd.updateBubbleAnchorBox = { x: -2, y: -1, width: 12, height: 11 };
 
     assert.deepStrictEqual(
@@ -93,7 +90,7 @@ describe("visible margin envelopes", () => {
   });
 
   it("keeps a stable update anchor for calico even though per-state hit bottoms differ", () => {
-    const calico = themeLoader.loadTheme("calico");
+    const calico = createGeometryTheme("calico");
     const anchor = computeThemeAnchorRect(calico, bounds);
     const thinkingHit = hitGeometry.getHitRectScreen(
       calico,
@@ -120,13 +117,13 @@ describe("visible margin envelopes", () => {
   });
 
   it("returns null for the update anchor when the theme has no layout", () => {
-    const theme = structuredClone(themeLoader.loadTheme("clawd"));
+    const theme = structuredClone(createGeometryTheme("clawd"));
     delete theme.layout;
     assert.strictEqual(computeThemeAnchorRect(theme, bounds), null);
   });
 
   it("still returns an anchor without layout when updateBubbleAnchorBox is present", () => {
-    const theme = structuredClone(themeLoader.loadTheme("clawd"));
+    const theme = structuredClone(createGeometryTheme("clawd"));
     delete theme.layout;
     theme.updateBubbleAnchorBox = { x: 0, y: 0, width: 20, height: 10 };
 

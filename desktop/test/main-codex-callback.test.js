@@ -10,6 +10,14 @@ const {
 } = require("../src/codex-monitor-callback");
 
 describe("Codex monitor callback helpers", () => {
+  it("passes bounded command previews through metadata-only result updates", () => {
+    const commandPreview = { label: "npm run build", status: "success", output: "Build complete", callId: "call-1" };
+    assert.deepStrictEqual(buildCodexMonitorSessionOptions({ commandPreview }).commandPreview, commandPreview);
+    assert.strictEqual(isCodexMonitorMetadataOnlyEvent("response_item:function_call_output", { commandPreview }), true);
+    assert.strictEqual(isCodexMonitorMetadataOnlyEvent("event_msg:exec_command_end", { commandPreview }), true);
+    assert.strictEqual(isCodexMonitorMetadataOnlyEvent("response_item:function_call", { commandPreview }), false);
+  });
+
   it("keeps title refreshes metadata-only even when their payload is missing", () => {
     assert.strictEqual(isCodexMonitorMetadataOnlyEvent("session_index:title", { sessionTitle: "Title" }), true);
     assert.strictEqual(isCodexMonitorMetadataOnlyEvent("session_index:title", null), true);

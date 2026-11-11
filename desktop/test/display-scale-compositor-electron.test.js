@@ -1,4 +1,5 @@
 "use strict";
+const { upstreamArtworkTest } = require("./helpers/upstream-artifacts");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -16,7 +17,7 @@ function electronExecutable() {
   }
 }
 
-test("display scale compositor: production SVG zoom, sampling and accessory geometry survive display changes", { timeout: 180_000 }, (t) => {
+upstreamArtworkTest("display scale compositor: production SVG zoom, sampling and accessory geometry survive display changes", { timeout: 180_000 }, (t) => {
   const executable = electronExecutable();
   if (!executable) return t.skip("Electron executable is not installed");
   if (process.platform === "linux" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
