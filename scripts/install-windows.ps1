@@ -8,7 +8,7 @@ if (-not $BuildDir) {
     else { Join-Path (Split-Path $PSScriptRoot -Parent) 'build\windows\CrossPet' }
 }
 $BuildDir = (Resolve-Path -LiteralPath $BuildDir).ProviderPath
-foreach ($need in @('CrossPet.exe','VERSION','web','characters','integrations','python\python.exe','runtime\CrossPet Plus.exe')) {
+foreach ($need in @('CrossPet.exe','VERSION','web','characters','integrations','tools\integrate.py','python\python.exe','runtime\CrossPet Plus.exe')) {
   if (-not (Test-Path -LiteralPath (Join-Path $BuildDir $need))) { throw "Incomplete combined build: $need" }
 }
 # A native self-update first asks the running host to quit. Allow that graceful
@@ -117,11 +117,41 @@ foreach ($folder in @([Environment]::GetFolderPath('Desktop'),[Environment]::Get
   $shortcut.TargetPath = $exe; $shortcut.WorkingDirectory = $destination
   $shortcut.IconLocation = (Join-Path $destination 'AppIcon.ico'); $shortcut.Save()
 }
+# Keep the upstream upgrade contract: refresh only integrations the user has
+# already installed. The original tool owns merging, backups and opt-outs.
+# A refresh failure does not invalidate the installed app; retain its output
+# and make the failure visible so the same native settings UI can repair it.
+$integrationRefresh = 'succeeded'
+$integrationRefreshExitCode = $null
+$previousPythonEncoding = $env:PYTHONIOENCODING
+$previousErrorAction = $ErrorActionPreference
+$previousConsoleEncoding = $null
+try {
+  $env:PYTHONIOENCODING = 'utf-8'
+  try { $previousConsoleEncoding = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+  $ErrorActionPreference = 'Continue'
+  $refreshOutput = & (Join-Path $destination 'python\python.exe') (Join-Path $destination 'tools\integrate.py') refresh 2>&1 | Out-String
+  $integrationRefreshExitCode = $LASTEXITCODE
+  [IO.File]::WriteAllText((Join-Path $backup 'integration-refresh.log'), $refreshOutput, $utf8)
+  if ($integrationRefreshExitCode -ne 0) { throw "AI integration refresh exited with code $integrationRefreshExitCode." }
+} catch {
+  $integrationRefresh = 'failed'
+  if (-not (Test-Path -LiteralPath (Join-Path $backup 'integration-refresh.log'))) {
+    [IO.File]::WriteAllText((Join-Path $backup 'integration-refresh.log'), [string]$_.Exception.Message, $utf8)
+  }
+  Write-Warning "AI integrations need attention. Open CrossPet Settings > Integrations to update them. Details: $backup\integration-refresh.log"
+} finally {
+  $ErrorActionPreference = $previousErrorAction
+  if ($null -eq $previousPythonEncoding) { Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue }
+  else { $env:PYTHONIOENCODING = $previousPythonEncoding }
+  if ($null -ne $previousConsoleEncoding) { try { [Console]::OutputEncoding = $previousConsoleEncoding } catch { } }
+}
 $receipt = [ordered]@{
   version = $version; installedAt = $stamp; architecture = 'native-crosspet-with-clawd-service'
   destination = $destination; previousInstallation = $(if ($hadOld) { $old } else { $null })
   backup = $backup; copiedFiles = $count; copiedBytes = $bytes; sha256Checked = $true
   permissionAutomationMode = 'off'; destructiveActionReminder = $true
+  integrationRefresh = $integrationRefresh; integrationRefreshExitCode = $integrationRefreshExitCode
 }
 [IO.File]::WriteAllText((Join-Path $backup 'installation.json'), ($receipt | ConvertTo-Json), $utf8)
 $receipt | ConvertTo-Json -Compress

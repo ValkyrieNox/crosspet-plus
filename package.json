@@ -1,6 +1,6 @@
 {
   "name": "crosspet-plus-workspace",
-  "version": "1.3.10-plus.5",
+  "version": "1.3.10-plus.6",
   "private": true,
   "description": "Original CrossPet desktop app with a Clawd task, approval and remote service",
   "license": "AGPL-3.0-only",
@@ -16,6 +16,7 @@
     "build:mac:dir": "node scripts/build-macos.cjs --dir",
     "test:mac:bridge": "sh tests/macos_plus_bridge.sh",
     "test:plus": "node --test tests/crosspet_service.test.js tests/macos_plus_build.test.js",
+    "audit:original": "python3 scripts/audit-crosspet-original.py",
     "build:mac:upstream": "bash app/build.sh"
   },
   "engines": { "node": ">=22.12.0" }

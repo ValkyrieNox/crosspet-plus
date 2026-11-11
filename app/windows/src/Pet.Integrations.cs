@@ -269,7 +269,7 @@ namespace CrossPet
                         case "openCharacters": Open(Store.Characters); break;
                         case "openCodexResets": Open("https://codex-resets.com"); break;
                         case "openData": Open(Store.Data); break;
-                        case "openReleases": Open("https://github.com/lokicorvus/crosspet/releases"); break;
+                        case "openReleases": Open($"https://github.com/{Repo}/releases"); break;
                         case "devConsole": OpenDev(); break;
                         case "feedback": OpenFeedback(); break;
                         case "characterWindow": OpenCharacterWindow(); break;
