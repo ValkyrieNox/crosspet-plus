@@ -163,6 +163,36 @@ async function fresh() {
 function assert(c, msg) { if (!c) throw Error(msg) }
 
 const cases = [
+  ['missing_command_metadata_never_renders_an_empty_running_terminal', async e => {
+    e.run(`hook('gpt','running','PreToolUse',{commandName:'curl',commandPreview:{label:'curl',status:'running',callId:'c1'}})`)
+    await e.advance(3000)
+    assert(e.run("$('fx').innerHTML.includes('$ curl')"), 'real command was hidden')
+    e.run(`hook('gpt','running','PreToolUse',{commandName:'',commandPreview:null})`)
+    await e.advance(3000)
+    assert(!e.run("$('fx').innerHTML.includes('Running...')"), 'running terminal survived missing command metadata')
+    assert(e.run("$('fx').innerHTML.includes(CrossFx.surroundings('thinking'))"), 'ordinary work effect missing')
+  }],
+  ['active_subagents_keep_delegating_after_parent_tool_completion', async e => {
+    e.run(`hook('gpt','delegating','PostToolUse',{subagents:3})`)
+    await e.advance(5000)
+    assert(e.state().pose === 'delegating', 'active subagents were replaced by ' + e.state().pose)
+    e.run(`hook('gpt','delegating','SubagentStop',{subagents:2})`)
+    await e.advance(5000)
+    assert(e.state().pose === 'delegating', 'remaining children lost delegation pose')
+    e.run(`hook('gpt','thinking','SubagentStop',{subagents:0})`)
+    await e.advance(5000)
+    assert(e.state().pose === 'thinking', 'completed children left stale delegation pose')
+  }],
+  ['active_subagents_yield_to_approval_and_errors', async e => {
+    e.run(`hook('gpt','delegating','PostToolUse',{subagents:3})`)
+    await e.advance(3000)
+    e.run(`hook('gpt','asking','PermissionRequest',{subagents:3})`)
+    await e.advance(3000)
+    assert(e.state().pose === 'asking', 'subagents hid an approval request')
+    e.run(`hook('gpt','oops','PostToolUse',{subagents:3})`)
+    await e.advance(3000)
+    assert(e.state().pose === 'oops', 'subagents hid an error')
+  }],
   ['short_command_is_visible_before_body_pose_dwell_finishes', async e => {
     e.run(`shownAt=Date.now(); hook('gpt','running','PreToolUse',{commandPreviewAt:Date.now()/1000, commandPreview:{label:'curl',status:'running',callId:'short'}})`)
     assert(e.run("$('fx').innerHTML.includes('$ curl')"), 'running command hidden during body dwell')

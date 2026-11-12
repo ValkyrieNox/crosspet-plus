@@ -101,7 +101,7 @@ describe("CodexLogMonitor", () => {
     monitor.start();
     setTimeout(() => {
       assert.strictEqual(previews.length, 4);
-      assert.ok(previews.every(preview => preview.label === "npm run build"));
+      assert.ok(previews.every(preview => preview.label === "npm run build > test.log"));
       assert.strictEqual(previews[2].status, "success");
       assert.strictEqual(previews[2].output, "Build complete");
       assert.strictEqual(previews[2].state, "working");

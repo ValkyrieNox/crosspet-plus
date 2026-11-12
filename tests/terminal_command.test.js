@@ -19,46 +19,44 @@ test("command labels extract only the first executable", () => {
   assert.equal(commandNameFromInput({ code: "doSomething()" }), "");
 });
 
-test("command labels retain the useful prefix before redirects and long arguments", () => {
+test("command labels preserve complete bounded command text and redact credentials", () => {
   for (const [command, expected] of [
-    ["npm run build > test.log", "npm run build"],
-    ["npm run build:mac", "npm run build"],
-    ["npm run build: mac", "npm run build"],
-    ["pnpm exec tsc --noEmit", "pnpm exec tsc"],
-    ["npx vite build --outDir dist", "npx vite build"],
-    ["npm run build:win:arm64 -- --verbose", "npm run build"],
-    ["pnpm run test:unit > test.log", "pnpm run test"],
-    ["yarn build:production --watch", "yarn build"],
-    ["bun run dev:local", "bun run dev"],
-    ["npm --prefix desktop run build:mac", "npm run build"],
-    ["npm run --silent build:mac", "npm run build"],
-    ["npm --token hidden run build:mac", "npm run build"],
-    ["pnpm -C app run lint:fix", "pnpm run lint"],
-    ["docker compose up --build service", "docker compose up"],
-    ["cargo build --release", "cargo build"],
-    ["go test ./...", "go test"],
-    ["git remote add origin https://example.com/repo", "git remote add"],
-    ["python3 -m pytest tests", "python3 -m pytest"],
-    ["npm run build -- --output dist --verbose", "npm run build"],
-    ["git status --short", "git status"],
-    ["curl --version", "curl --version"],
-    ["npm test && git add .", "npm test"],
-    ["TOKEN=secret npm run build 2>&1", "npm run build"],
-    ["echo 2 > test.log", "echo 2"],
-    ["npm run build\necho done", "npm run build"],
-    ['curl -H "Authorization: secret" https://example.com', "curl"],
-    ['& "C:\\Program Files\\nodejs\\npm.cmd" run build:win 2>&1', "npm run build"],
-    ['"C:\\Program Files\\Git\\bin\\GIT.EXE" status --short', "git status"],
-    ['C:\\Python313\\python.exe -m pytest tests', "python -m pytest"],
-    ['& dotnet.exe build -c Release', "dotnet build"],
+    ["npm run build > test.log", "npm run build > test.log"],
+    ["npm run build:mac", "npm run build:mac"],
+    ["npm --prefix desktop run build:mac", "npm --prefix desktop run build:mac"],
+    ["docker compose up --build service", "docker compose up --build service"],
+    ["python3 -m pytest tests", "python3 -m pytest tests"],
+    ["echo 'a|b' | cat", "echo 'a|b' | cat"],
+    ["npm test && git add .", "npm test && git add ."],
+    ["npm run build\necho done", "npm run build echo done"],
+    ["(cd /tmp && npm test)", "(cd /tmp && npm test)"],
+    ["TOKEN=secret npm run build 2>&1", "TOKEN=*** npm run build 2>&1"],
+    ["npm --token hidden run build:mac", "npm --token *** run build:mac"],
+    ["curl --token=hidden", "curl --token=***"],
+    ['curl -H "Authorization: secret" https://example.com', 'curl -H *** https://example.com'],
+    ["curl https://user:secret@example.com", "curl https://***@example.com"],
+    ["TOKEN='pa'\\''ss' npm test", "TOKEN=*** npm test"],
+    ["curl -u'user:pa'\\''ss' https://example.com", "curl -u*** https://example.com"],
+    ["TOKEN=\"a secret\\", "TOKEN=***"],
+    ["curl ftp://user:secret@example.com", "curl ftp://***@example.com"],
+    [["env", "TOKEN=first secret", "npm", "test"], "env TOKEN=*** npm test"],
+    [["curl", "--token=first secret"], "curl --token=***"],
+    [["curl", "--user=first secret"], "curl --user=***"],
+    ["git clone https://ghp_example@example.com/repo", "git clone https://***@example.com/repo"],
+    ["& \"C:\\Program Files\\nodejs\\npm.cmd\" run build:win 2>&1", "& \"C:\\Program Files\\nodejs\\npm.cmd\" run build:win 2>&1"],
+    ["\"C:\\Program Files\\Git\\bin\\GIT.EXE\" status --short", "\"C:\\Program Files\\Git\\bin\\GIT.EXE\" status --short"],
+    ["C:\\Python313\\python.exe -m pytest tests", "C:\\Python313\\python.exe -m pytest tests"],
+    ["& dotnet.exe build -c Release", "& dotnet.exe build -c Release"],
+    ["echo " + "x".repeat(100), "echo " + "x".repeat(59)],
   ]) assert.equal(commandLabelFromInput({ command }), expected);
-  assert.equal(normalizeCommandPreview({ label: "npm run build:mac", status: "running" }).label, "npm run build");
+  assert.equal(commandLabelFromInput({ command: ["npm", "run", "build:mac"] }), "npm run build:mac");
+  assert.equal(normalizeCommandPreview({ label: "npm run build:mac", status: "running" }).label, "npm run build:mac");
 });
 
 test("command previews use real results and keep yielded commands running", () => {
   const input = { cmd: "npm run build > test.log" };
   assert.deepEqual(buildCommandPreview(input, "PreToolUse", null, { callId: "a" }), {
-    label: "npm run build", status: "running", output: "", callId: "a",
+    label: "npm run build > test.log", status: "running", output: "", callId: "a",
   });
   assert.equal(buildCommandPreview(input, "PostToolUse", { exit_code: 0, stdout: "Built" }).output, "Built");
   assert.equal(buildCommandPreview(input, "PostToolUse", { exit_code: 0, stdout: "x".repeat(100) }).status, "success");
@@ -120,9 +118,23 @@ test("official hooks pass executable labels through the monitor callback contrac
   const resolve = () => ({});
   const payload = { hook_event_name: "PreToolUse", session_id: "s1", tool_name: "exec_command", tool_input: { cmd: "ssh user@host" } };
   assert.equal(codex.buildStateBody(payload, resolve).command_name, "ssh");
-  assert.equal(codex.buildStateBody({ ...payload, tool_input: { cmd: "npm run build > test.log" } }, resolve).command_preview.label, "npm run build");
+  assert.equal(codex.buildStateBody({ ...payload, tool_input: { cmd: "npm run build > test.log" } }, resolve).command_preview.label, "npm run build > test.log");
   assert.equal(claude.buildStateBody("PreToolUse", { ...payload, tool_input: { command: "curl --version" } }, resolve).command_name, "curl");
   assert.equal(buildCodexMonitorSessionOptions({ commandName: "ssh", toolName: "exec_command" }).commandName, "ssh");
+});
+
+test("unknown tools and unlabeled shell events do not claim a running command", () => {
+  for (const tool of ["mcp__cua_repl__js", "functions.exec", "unknown_tool", "", "Bash", "exec_command"]) {
+    const row = projectSession("s1", { agentId: "codex", state: "working", lastToolName: tool }, new Set());
+    assert.equal(row.pose, "thinking", tool);
+  }
+  for (const tool of ["Bash", "functions.exec_command", "write_stdin"]) {
+    const row = projectSession("s1", { agentId: "codex", state: "working", lastToolName: tool, commandName: "curl" }, new Set());
+    assert.equal(row.pose, "running", tool);
+  }
+  const active = projectSession("s1", { agentId: "codex", state: "working", lastToolName: "mcp__cua_repl__js",
+    commandPreview: { label: "curl", status: "running", callId: "c1" } }, new Set());
+  assert.equal(active.pose, "running", "a concurrent genuine command stays visible");
 });
 
 test("a running pet refreshes its command without changing pose", () => {
@@ -146,6 +158,11 @@ test("terminal effects show actual commands in single and multiple sessions", ()
   vm.runInContext(fs.readFileSync(require.resolve("../app/web/effects.js"), "utf8"), context);
   const fx = context.window.CrossFx;
   for (const render of [fx.surroundings, fx.cardProp]) {
+    assert.equal(render("running"), render("thinking"), 'missing command uses ordinary work effect');
+    assert.equal(render("running", "", {label:"   ",status:"running"}), render("thinking"));
+    assert.match(render("running", "curl", {label:"",status:"running"}), /\$ curl/);
+    assert.match(render("running", "npm", {label:"npm run build:mac",status:"running"}), /\$ npm run build:mac/);
+    assert.match(render("running", "npm", {label:"npm run build --verbose",status:"running"}), /\$ npm run build --…/);
     assert.match(render("running", "curl"), /\$ curl/);
     assert.match(render("running", "ssh"), /\$ ssh/);
     assert.doesNotMatch(render("running"), /npm test|12 passed|git add/);
@@ -155,7 +172,7 @@ test("terminal effects show actual commands in single and multiple sessions", ()
     assert.match(render("running", "npm", { label: "npm run build", status: "failure", output: "" }), /Failed/);
     assert.match(render("running", "npm", { label: "npm run build", status: "finished", output: "" }), /Finished/);
     assert.match(render("running", "npm", { label: "npm run build", status: "finished", output: "" }), /#c6cbd1/);
-    assert.match(render("running", "npm", { label: "npm run build", status: "running", output: "" }), /width="144" height="50" overflow="hidden"/);
+    assert.match(render("running", "npm", { label: "npm run build", status: "running", output: "" }), /width="160" height="50" overflow="hidden"/);
     assert.match(render("running", "echo", { label: "echo ok", status: "success", output: "ok" }), /✓ ok/);
     assert.match(render("running", "pytest", { label: "pytest", status: "running", output: "collecting" }), /Running\.\.\./);
     assert.match(render("running", "pytest", { label: "pytest", status: "success", output: "12 passed" }), /✓ 12 passed/);
@@ -164,6 +181,28 @@ test("terminal effects show actual commands in single and multiple sessions", ()
     assert.doesNotMatch(render("running", "pytest", { label: "pytest", status: "failure", output: "this error is far too long to fit" }), /this error|…/);
     assert.doesNotMatch(render("running", "echo", { label: "echo <svg>", status: "success", output: "<script>" }), /<script>|echo <svg>/);
   }
+});
+
+test("left terminal cards keep command text readable while thinking clouds mirror", () => {
+  const source = fs.readFileSync(require.resolve("../app/web/index.html"), "utf8").match(/^function flipCard\([^]*?^\}/m)[0];
+  const context = vm.createContext({ window: {} });
+  vm.runInContext(fs.readFileSync(require.resolve("../app/web/effects.js"), "utf8"), context);
+  context.CrossFx = context.window.CrossFx;
+  vm.runInContext(source, context);
+  const svg = { style: {} };
+  const card = { pose: "running", side: "left", commandName: "npm",
+    commandPreview: { label: "npm run build:mac", status: "running" }, el: { querySelector: () => svg } };
+  context.flipCard(card);
+  assert.equal(svg.style.transform, "", "command text must read left to right");
+  card.commandPreview.status = "success";
+  context.flipCard(card);
+  assert.equal(svg.style.transform, "", "completed command text must stay readable");
+  card.pose = "thinking";
+  context.flipCard(card);
+  assert.equal(svg.style.transform, "scaleX(-1)", "left cloud tail points toward pet");
+  card.side = "right";
+  context.flipCard(card);
+  assert.equal(svg.style.transform, "");
 });
 
 test("completed command output remains readable briefly while the pet thinks", () => {

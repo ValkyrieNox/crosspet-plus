@@ -786,48 +786,33 @@ def command_name_from_input(value) -> str:
 
 
 def command_label_from_input(value) -> str:
-    words = command_words(value)
-    command = command_name_from_input(value)
-    if not command:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return ""
+    if not isinstance(value, dict):
         return ""
-    # npm.cmd / GIT.EXE have the same useful subcommands as npm / git.
-    portable = re.sub(r"\.(?:exe|cmd|bat)$", "", command, flags=re.I).lower()
-    if portable in ("npm", "pnpm", "yarn", "bun", "git", "docker", "podman", "cargo", "go", "dotnet", "make", "gradle", "mvn", "kubectl", "helm", "uv", "npx", "bunx") or re.fullmatch(r"python(?:3(?:\.\d+)?)?", portable):
-        command = portable
-    args = words[1:]
-    value_options = {"--prefix", "--workspace", "-w", "--cwd", "--dir", "-C", "--context", "--project-directory",
-                     "--token", "--password", "--user", "--username", "--registry", "--cache", "--filter", "--config", "--userconfig", "--globalconfig", "--store-dir", "-F"}
-    while args and args[0].startswith("-"):
-        if re.fullmatch(r"python(?:3(?:\.\d+)?)?", command) and args[0] == "-m" and len(args) > 1 and re.fullmatch(r"[\w.-]+", args[1]):
-            return f"{command} -m {args[1]}"
-        option = args.pop(0)
-        if option in value_options and args:
-            args.pop(0)
-    if command in ("npm", "pnpm", "yarn", "bun"):
-        action = args.pop(0) if args else ""
-        if action == "run-script":
-            action = "run"
-        while args and args[0].startswith("-"):
-            option = args.pop(0)
-            if option in value_options and args:
-                args.pop(0)
-        if action == "run" and args and re.fullmatch(r"[\w.-][\w:.-]*", args[0]):
-            return f"{command} run {args[0].split(':')[0]}"[:64]
-        if action in ("exec", "dlx", "x") and args and re.fullmatch(r"[\w.-]+", args[0]):
-            return f"{command} {action} {args[0]}"[:64]
-        return f"{command} {action.split(':')[0]}" if re.fullmatch(r"[\w:.-]+", action) else command
-    if command in ("git", "docker", "podman", "cargo", "go", "dotnet", "make", "gradle", "mvn", "kubectl", "helm", "uv", "npx", "bunx") and args and re.fullmatch(r"[\w-]+", args[0]):
-        prefix = [command, args[0]]
-        nested = {"git": ("remote", "worktree", "submodule", "stash"), "docker": ("compose", "container", "image", "volume", "network", "buildx"),
-                  "podman": ("compose", "container", "image", "volume", "network"), "go": ("mod", "work"), "kubectl": ("config", "rollout"),
-                  "uv": ("run", "tool"), "npx": (args[0],), "bunx": (args[0],)}
-        if args[0] in nested.get(command, ()) and len(args) > 1 and re.fullmatch(r"[\w.-]+", args[1]):
-            prefix.append(args[1])
-        return " ".join(prefix)[:64]
-    label = " ".join(words)
-    if display_columns(label) <= 18 and not sensitive_text(label):
-        return label
-    return command if display_columns(command) <= 18 else ""
+    command = value.get("command", value.get("cmd", value.get("CommandLine", "")))
+    if isinstance(command, list):
+        command = shlex.join(str(part) for part in command)
+    if not isinstance(command, str):
+        return ""
+    text = re.sub(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))", "", command[:8192])
+    text = re.sub(r"[\x00-\x1f\x7f]", " ", text).strip()
+    # Redact before truncation, including credentials in unfinished quotes.
+    argument = r"""(?:"(?:\\(?:.|$)|[^"\\])*(?:"|$)|'[^']*(?:'|$)|\\(?:.|$)|[^\s;&|<>'"\\])+"""
+    def redact_assignment(match):
+        prefix = re.match(r"""^["']?([\w.-]*(?:token|password|passwd|secret|api[_-]?key|private[_-]?key|authorization|cookie|user|username|header)[\w.-]*=)""", match.group(0), re.I)
+        return prefix.group(1) + "***" if prefix else match.group(0)
+
+    text = re.sub(argument, redact_assignment, text)
+    text = re.sub(r"(\b[\w.-]*(?:token|password|passwd|secret|api[_-]?key|private[_-]?key|authorization|cookie)[\w.-]*=)(?:" + argument + ")",
+                  r"\1***", text, flags=re.I)
+    text = re.sub(r"((?:^|\s)(?:--(?:token|password|passwd|secret|api[_-]?key|private-key|access-token|auth-token|cookie|user|username|header)(?:=|\s+)|-[Hu]\s*))(?:" + argument + ")",
+                  r"\1***", text, flags=re.I)
+    text = re.sub(r"""([a-z][a-z0-9+.-]*://)[^\s/@'"]+@""", r"\1***@", text, flags=re.I)
+    return text[:64]
 
 
 def response_details():

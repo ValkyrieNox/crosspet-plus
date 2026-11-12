@@ -26,8 +26,8 @@ ADAPTERS = {
 # Command-preview adaptations are pinned as complete files. Additional edits
 # to the renderer are still reported, including changes outside the terminal.
 TERMINAL_RENDERER_BLOBS = {
-    "app/web/index.html": "ab7e885cdd5f1c268e225ab5b070f44665079e73",
-    "app/web/effects.js": "e82c2fae11071a0bd772693d57c43101a0e3ecf3",
+    "app/web/index.html": "370d080ebc33d7c4aba3d123dc320a1c65d39d07",
+    "app/web/effects.js": "e1b6de428a6f57bc35fd2c73e0e62d93e51e22bb",
 }
 
 

@@ -100,7 +100,7 @@ const floatingGlyphs = ['A', 'あ', '{ }', '∑', '文'].map((g, i) =>
 
 // 跑命令：右上角小终端，一行行打字
 const terminal = (commandName = '', preview = null) => {
-  const x = 396, y = 40
+  const x = 380, y = 40
   const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char])
   const fit = (value, columns) => {
     let text = '', width = 0
@@ -112,7 +112,8 @@ const terminal = (commandName = '', preview = null) => {
     return text
   }
   const name = typeof commandName === 'string' && /^[\p{L}\p{N}_.+-]{1,64}$/u.test(commandName) ? commandName : ''
-  const label = typeof preview?.label === 'string' ? preview.label.slice(0, 64) : name
+  const label = (typeof preview?.label === 'string' ? preview.label.trim().slice(0, 64) : '') || name
+  if (!label) return thoughtCloud
   const status = preview?.status || 'running'
   const output = typeof preview?.output === 'string' ? preview.output : ''
   const fallback = { running: 'Running...', success: 'Finished', failure: 'Failed', finished: 'Finished' }
@@ -122,11 +123,11 @@ const terminal = (commandName = '', preview = null) => {
   const shortOutput = !/[\r\n]/.test(output) && width(output) <= 19 ? output : ''
   const result = status === 'running' ? fallback.running : shortOutput
     ? (width(marker + shortOutput) <= 19 ? marker + shortOutput : shortOutput) : fallback[status] || 'Finished'
-  return `<g><rect x="${x}" y="${y}" width="164" height="86" rx="8" fill="#262626" stroke="#fff" stroke-width="3"/>` +
+  return `<g><rect x="${x}" y="${y}" width="180" height="86" rx="8" fill="#262626" stroke="#fff" stroke-width="3"/>` +
     `<circle cx="${x + 12}" cy="${y + 11}" r="4" fill="#ff5f56"/><circle cx="${x + 24}" cy="${y + 11}" r="4" fill="#ffbd2e"/><circle cx="${x + 36}" cy="${y + 11}" r="4" fill="#27c93f"/>` +
-    `<svg x="${x + 10}" y="${y + 24}" width="144" height="50" overflow="hidden">` +
-    `<text x="0" y="14" font-size="12" fill="#e8e8e8" font-family="monospace">${escape('$ ' + fit(label, 17))}</text>` +
-    `<text x="0" y="40" font-size="12" fill="${color}" font-family="monospace">${escape(fit(result, 19))}</text></svg></g>`
+    `<svg x="${x + 10}" y="${y + 24}" width="160" height="50" overflow="hidden">` +
+    `<text x="0" y="16" font-size="14" fill="#e8e8e8" font-family="monospace">${escape('$ ' + fit(label, 17))}</text>` +
+    `<text x="0" y="40" font-size="14" fill="${color}" font-family="monospace">${escape(fit(result, 19))}</text></svg></g>`
 }
 
 const magnifier = `<g><circle r="22" fill="#cfefff" fill-opacity="0.55" stroke="${INK}" stroke-width="5"/><circle cx="-7" cy="-7" r="6" fill="#fff" opacity="0.8"/><path d="M15 15 L34 34" stroke="#8b5a2b" stroke-width="8" stroke-linecap="round"/>` +

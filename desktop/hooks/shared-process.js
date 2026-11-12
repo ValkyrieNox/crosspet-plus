@@ -26,59 +26,25 @@ function commandLabelFromInput(input) {
     try { input = JSON.parse(input); } catch { return ""; }
   }
   let command = input?.command ?? input?.cmd ?? input?.CommandLine;
-  if (Array.isArray(command)) command = command.join(" ");
+  if (Array.isArray(command)) {
+    command = command.map(value => {
+      const part = String(value);
+      return /^[\w@%+=:,./-]+$/.test(part) ? part : "'" + part.replace(/'/g, "'\\''") + "'";
+    }).join(" ");
+  }
   if (typeof command !== "string") return "";
-  const tokens = command.slice(0, 8192).matchAll(/(?:[^\s;&|<>'"]+|"[^"]*"|'[^']*')+|&&|\|\||[;&|<>\r\n]/g);
-  const words = [];
-  let previous;
-  for (const match of tokens) {
-    const token = match[0];
-    if (!words.length && token === "&") continue;
-    if (/^(?:&&|\|\||[;&|<>\r\n])$/.test(token)) {
-      if ((token === ">" || token === "<") && words.length > 1 && /^\d+$/.test(words[words.length - 1])
-        && previous.index + previous[0].length === match.index) words.pop();
-      break;
-    }
-    if (!words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue;
-    words.push(token);
-    previous = match;
-  }
-  if (!words.length) return "";
-  let name = words[0].replace(/["']/g, "").split(/[\\/]/).pop();
-  if (!/^[\p{L}\p{N}_.+-]{1,64}$/u.test(name)) return "";
-  const portable = name.replace(/\.(?:exe|cmd|bat)$/i, "").toLowerCase();
-  if (/^(?:npm|pnpm|yarn|bun|git|docker|podman|cargo|go|dotnet|make|gradle|mvn|kubectl|helm|uv|npx|bunx|python(?:3(?:\.\d+)?)?)$/.test(portable)) name = portable;
-  const args = words.slice(1).map(word => word.replace(/^(["'])(.*)\1$/, "$2"));
-  const valueOptions = new Set(["--prefix", "--workspace", "-w", "--cwd", "--dir", "-C", "--context", "--project-directory",
-    "--token", "--password", "--user", "--username", "--registry", "--cache", "--filter", "--config", "--userconfig", "--globalconfig", "--store-dir", "-F"]);
-  while (args[0]?.startsWith("-")) {
-    if (/^python(?:3(?:\.\d+)?)?$/.test(name) && args[0] === "-m" && /^[\w.-]+$/.test(args[1] || "")) return `${name} -m ${args[1]}`;
-    const option = args.shift();
-    if (valueOptions.has(option)) args.shift();
-  }
-  if (/^(?:npm|pnpm|yarn|bun)$/.test(name)) {
-    const first = args.shift();
-    const action = first === "run-script" ? "run" : first;
-    while (args[0]?.startsWith("-")) {
-      const option = args.shift();
-      if (valueOptions.has(option)) args.shift();
-    }
-    if (action === "run" && /^[\w.-][\w:.-]*$/.test(args[0] || "")) return `${name} run ${args[0].split(":")[0]}`.slice(0, 64);
-    if (["exec", "dlx", "x"].includes(action) && /^[\w.-]+$/.test(args[0] || "")) return `${name} ${action} ${args[0]}`.slice(0, 64);
-    if (/^[\w:.-]+$/.test(action || "")) return `${name} ${action.split(":")[0]}`;
-    return name;
-  }
-  if (/^(?:git|docker|podman|cargo|go|dotnet|make|gradle|mvn|kubectl|helm|uv|npx|bunx)$/.test(name)
-    && /^[\w-]+$/.test(args[0] || "")) {
-    const prefix = [name, args[0]];
-    const nested = { git: ["remote", "worktree", "submodule", "stash"], docker: ["compose", "container", "image", "volume", "network", "buildx"],
-      podman: ["compose", "container", "image", "volume", "network"], go: ["mod", "work"], kubectl: ["config", "rollout"], uv: ["run", "tool"], npx: [args[0]], bunx: [args[0]] };
-    if (nested[name]?.includes(args[0]) && /^[\w.-]+$/.test(args[1] || "")) prefix.push(args[1]);
-    return prefix.join(" ").slice(0, 64);
-  }
-  const label = [name, ...words.slice(1)].join(" ");
-  if (shortCommandText(label) && !/(?:^|\s)(?:-H|--header|-u|--user|--password|--token)(?:\s|=)/.test(label)) return label;
-  return name;
+  let text = command.slice(0, 8192).replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "")
+    .replace(/[\x00-\x1f\x7f]/g, " ").trim();
+  // Redact before truncation so a clipped quoted credential cannot leak.
+  const value = /(?:"(?:\\(?:.|$)|[^"\\])*(?:"|$)|'[^']*(?:'|$)|\\(?:.|$)|[^\s;&|<>'"\\])+/.source;
+  text = text.replace(new RegExp(value, "g"), word => {
+    const assignment = word.match(/^["']?([\w.-]*(?:token|password|passwd|secret|api[_-]?key|private[_-]?key|authorization|cookie|user|username|header)[\w.-]*=)/i);
+    return assignment ? assignment[1] + "***" : word;
+  });
+  text = text.replace(new RegExp("(\\b[\\w.-]*(?:token|password|passwd|secret|api[_-]?key|private[_-]?key|authorization|cookie)[\\w.-]*=)(?:" + value + ")", "gi"), "$1***");
+  text = text.replace(new RegExp("((?:^|\\s)(?:--(?:token|password|passwd|secret|api[_-]?key|private-key|access-token|auth-token|cookie|user|username|header)(?:=|\\s+)|-[Hu]\\s*))(?:" + value + ")", "gi"), "$1***");
+  text = text.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi, "$1***@");
+  return text.slice(0, 64);
 }
 
 function shortCommandText(value) {

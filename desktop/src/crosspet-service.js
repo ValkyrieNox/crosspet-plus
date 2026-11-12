@@ -20,6 +20,7 @@ const AGENTS = {
   hermes:["current","hermes"], "kimi-cli":["current","kimi"]
 };
 const TOOL_POSES = [
+  [/(?:^|[._:])(?:bash|shell|exec_command|run_command|shell_exec|execute_command|command_status|send_command_input|read_terminal|write_stdin)$/i,"running"],
   [/read|view|list|glob|file_search/i,"reading"],
   [/write|edit|patch|create.*file/i,"writing"],
   [/search|browse|web|fetch/i,"searching"],
@@ -35,7 +36,11 @@ function projectSession(id, session, pending) {
   const state = pending.has(id) ? "notification" : session.state;
   let pose = ({ thinking:"thinking", attention:"happy", error:"oops", notification:"asking",
     sweeping:"compact", carrying:"proud", idle:"idle", sleeping:"sleeping", juggling:"delegating" })[state];
-  if (!pose) pose = TOOL_POSES.find(([pattern]) => pattern.test(tool))?.[1] || "running";
+  if (!pose) {
+    const hasCommand = Boolean(session.commandName || (session.commandPreview?.status === "running" && session.commandPreview.label));
+    pose = TOOL_POSES.find(([pattern]) => pattern.test(tool))?.[1] || (hasCommand ? "running" : "thinking");
+    if (pose === "running" && !hasCommand) pose = "thinking";
+  }
   const remote = session.host || session.wslDistro || (session.profileId && session.profileId !== "local");
   // A local native CrossPet hook and Clawd hook for the same conversation must
   // merge as one task; remote profiles retain distinct identities.

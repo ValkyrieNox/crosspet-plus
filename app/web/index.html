@@ -1375,7 +1375,7 @@ function setCardPose(c, p, commandName = '', commandPreview = null) {
 }
 // 思考云是画在她右上方的，小尾巴朝左下指向她：卡片在她左边时左右翻过来，小尾巴才朝着她（有字的卡片不翻）
 function flipCard(c) {
-  const cloud = c.pose && CrossFx.cardProp(c.pose) === CrossFx.cardProp('thinking')
+  const cloud = c.pose && CrossFx.cardProp(c.pose, c.commandName, c.commandPreview) === CrossFx.cardProp('thinking')
   c.el.querySelector('svg').style.transform = cloud && c.side === 'left' ? 'scaleX(-1)' : ''
 }
 function startMulti() {
@@ -1491,6 +1491,10 @@ function playCharState(id, s) {
   else if (ev === 'Stop' && (s.pose === 'happy' || s.pose === 'proud')) lastTrouble[id] = 0  // 最后顺利完成了，不算
   // 工具动作被紧跟着的「思考」盖掉时，状态里会捎带上它（after）：没演过的话先演，停够了再思考
   if (ev === 'PreToolUse' || ev === 'BeforeTool') seenTool[id] = s.ts
+  if (s.pose === 'delegating' && Number(s.subagents) > 0) {
+    show('delegating', true)
+    return
+  }
   if (s.after && s.afterTs !== seenTool[id]) {
     seenTool[id] = s.afterTs
     show(s.after, true)
