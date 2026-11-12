@@ -58,16 +58,7 @@ namespace CrossPet
         }
 
         // ---------------- 开机启动（当前用户的 Run 注册表项，不需要管理员） ----------------
-        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        static string Exe => Process.GetCurrentProcess().MainModule.FileName;
-        static bool LoginEnabled
-        {
-            get { using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) return (k?.GetValue("CrossPet") as string)?.Contains(Exe) == true; }
-        }
-        static void ToggleLogin()
-        {
-            using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
-                if (LoginEnabled) k.DeleteValue("CrossPet", false); else k.SetValue("CrossPet", $"\"{Exe}\"");
-        }
+        static bool LoginEnabled => WindowsLogin.Enabled;
+        static void ToggleLogin() => WindowsLogin.SetEnabled(!LoginEnabled);
     }
 }

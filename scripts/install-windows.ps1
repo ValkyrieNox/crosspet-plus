@@ -58,6 +58,15 @@ foreach ($name in @('CrossPet','com.clawd.on-desk','com.valkyrienox.crosspet-plu
   }
 }
 [IO.File]::WriteAllText((Join-Path $backup 'login-items.json'), ($loginBackup | ConvertTo-Json), $utf8)
+$approvalKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+$startupApproval = Get-ItemProperty -LiteralPath $approvalKey -Name 'CrossPet' -ErrorAction SilentlyContinue
+$startupApprovalBytes = if ($startupApproval) { $startupApproval.CrossPet } else { $null }
+$startupApproved = $null -eq $startupApprovalBytes -or
+  ($startupApprovalBytes -is [byte[]] -and $startupApprovalBytes.Length -ge 4 -and
+    [BitConverter]::ToUInt32($startupApprovalBytes, 0) -in @(2, 6))
+$approvalBackup = @{ name = 'CrossPet'; key = $approvalKey; exists = ($null -ne $startupApprovalBytes)
+  value = $(if ($startupApprovalBytes -is [byte[]]) { [Convert]::ToBase64String($startupApprovalBytes) } else { $startupApprovalBytes }) }
+[IO.File]::WriteAllText((Join-Path $backup 'startup-approval.json'), ($approvalBackup | ConvertTo-Json), $utf8)
 $count = 0; $bytes = [long]0
 foreach ($source in Get-ChildItem -LiteralPath $BuildDir -File -Recurse) {
   $relative = $source.FullName.Substring($BuildDir.TrimEnd('\').Length).TrimStart('\')
@@ -72,18 +81,35 @@ foreach ($source in Get-ChildItem -LiteralPath $BuildDir -File -Recurse) {
 $copied = @(Get-ChildItem -LiteralPath $staged -File -Recurse)
 if ($copied.Count -ne $count -or ($copied | Measure-Object Length -Sum).Sum -ne $bytes) { throw 'Staging file count/size mismatch.' }
 # Keep the previous complete installation for rollback. Do not delete it.
+function Rename-CrossPetDirectory([string]$Path, [string]$NewName) {
+  # Windows can briefly hold newly copied files during indexing/scanning.
+  # Retry the same directory move; keep the existing rollback on failure.
+  $renameDeadline = (Get-Date).AddSeconds(12)
+  while ($true) {
+    try { Rename-Item -LiteralPath $Path -NewName $NewName -ErrorAction Stop; return }
+    catch {
+      $cause = $_.Exception.GetBaseException()
+      if (($cause -isnot [IO.IOException] -and $cause -isnot [UnauthorizedAccessException]) -or
+          (Get-Date) -ge $renameDeadline) { throw }
+      Start-Sleep -Milliseconds 250
+    }
+  }
+}
 $hadOld = Test-Path -LiteralPath $destination
-if ($hadOld) { Rename-Item -LiteralPath $destination -NewName (Split-Path $old -Leaf) }
-try { Rename-Item -LiteralPath $staged -NewName (Split-Path $destination -Leaf) }
+if ($hadOld) { Rename-CrossPetDirectory $destination (Split-Path $old -Leaf) }
+try { Rename-CrossPetDirectory $staged (Split-Path $destination -Leaf) }
 catch {
-  if ($hadOld) { Rename-Item -LiteralPath $old -NewName (Split-Path $destination -Leaf) }
+  if ($hadOld) { Rename-CrossPetDirectory $old (Split-Path $destination -Leaf) }
   throw
 }
 # Offline migration only. The running service's settings controller remains
 # the sole live writer. Preserve unrelated preferences, WSL and SSH profiles.
 $prefsPath = $files['clawd-prefs.json']
 $prefs = if (Test-Path -LiteralPath $prefsPath) { Get-Content -Raw -Encoding UTF8 -LiteralPath $prefsPath | ConvertFrom-Json } else { [pscustomobject]@{} }
-$loginEnabled = $loginBackup.ContainsKey('CrossPet') -or ($prefs.openAtLogin -eq $true)
+# Preserve an explicit Windows disablement on upgrade; stale backend prefs
+# must not silently turn it back on. Explicit settings changes use the host.
+$loginEnabled = if ($loginBackup.ContainsKey('CrossPet')) { $startupApproved }
+  else { $startupApproved -and ($prefs.openAtLogin -eq $true) }
 $changes = @{ theme = 'clawd'; permissionAutomationMode = 'off'; destructiveActionReminder = $true }
 foreach ($key in $changes.Keys) { $prefs | Add-Member -Force -NotePropertyName $key -NotePropertyValue $changes[$key] }
 New-Item -ItemType Directory -Force -Path (Split-Path $prefsPath -Parent) | Out-Null
@@ -92,10 +118,19 @@ foreach ($name in @('com.clawd.on-desk','com.valkyrienox.crosspet-plus')) {
   if ($loginBackup.ContainsKey($name)) { Remove-ItemProperty -LiteralPath $runPath -Name $name }
 }
 $exe = Join-Path $destination 'CrossPet.exe'
+$startupWarning = $null
 if ($loginEnabled) {
   New-Item -Path $runPath -Force | Out-Null
   Set-ItemProperty -LiteralPath $runPath -Name 'CrossPet' -Value ('"' + $exe + '"')
+  $loginUpdate = Start-Process -FilePath $exe -ArgumentList '--login-enable' -Wait -PassThru -WindowStyle Hidden
+  if ($loginUpdate.ExitCode -ne 0) {
+    $startupWarning = 'Windows did not retain CrossPet login startup. Check CrossPet in your startup manager.'
+    Write-Warning $startupWarning
+  }
 }
+$loginStatus = Start-Process -FilePath $exe -ArgumentList '--login-status' -Wait -PassThru -WindowStyle Hidden
+$startupEnabledAfterInstall = if ($loginStatus.ExitCode -eq 0) { $true }
+  elseif ($loginStatus.ExitCode -eq 1) { $false } else { $null }
 $shell = New-Object -ComObject WScript.Shell
 foreach ($folder in @([Environment]::GetFolderPath('Desktop'),[Environment]::GetFolderPath('Programs'))) {
   # Retire earlier duplicate launchers, preserving a verified backup. The old
@@ -152,6 +187,7 @@ $receipt = [ordered]@{
   backup = $backup; copiedFiles = $count; copiedBytes = $bytes; sha256Checked = $true
   permissionAutomationMode = 'off'; destructiveActionReminder = $true
   integrationRefresh = $integrationRefresh; integrationRefreshExitCode = $integrationRefreshExitCode
+  startupEnabled = $startupEnabledAfterInstall; startupWarning = $startupWarning
 }
 [IO.File]::WriteAllText((Join-Path $backup 'installation.json'), ($receipt | ConvertTo-Json), $utf8)
 $receipt | ConvertTo-Json -Compress

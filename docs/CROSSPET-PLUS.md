@@ -77,6 +77,8 @@ Mac Plus 使用本 fork 对应架构的完整组合包更新。点击更新后�
 
 CrossPet 原生更新器指向本仓库的完整组合包。后台不单独安装 Electron 更新。自动启动复用 CrossPet 自己的 `--ensure` 逻辑，尊重手动退出和“AI 开始工作时自动出现”开关。
 
+Windows 的“开机启动”指登录 Windows 后启动。原生设置与任务设置共用唯一的 CrossPet 启动项，同时核对 Windows 的启用状态；任务管理器禁用后会显示为关闭。启用被启动管理软件撤销时会报错，不反复强制开启，也不新增其他启动通道。可按 Win＋R 输入 `ms-settings:startupapps`，在 Windows“启动”页面查找 CrossPet 并打开开关；若它再次关闭，需要在实际管理启动项的软件中允许 CrossPet。
+
 账号、PAT、SSH 配置、运行状态和备份均不提交仓库。DSH 的鲸鲸独立运行。
 
 ## 平台与确认范围

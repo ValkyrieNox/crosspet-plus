@@ -390,6 +390,8 @@ const {
   isAllBubblesHidden,
 } = require("./bubble-policy");
 const loginItemHelpers = require("./login-item");
+const nativeLoginItem = crosspetServiceMode && isWin
+  ? require("./crosspet-login-item").createCrosspetLoginItem(crosspetLaunch.host) : null;
 const { writeCodexAutoStartGate } = require("../hooks/server-config");
 const { effectiveClaudeConfigDirs, claudeConfigDirKey } = require("../hooks/claude-config-dirs");
 const { createCodexAutoStartGateEvaluator } = require("./agent-gate");
@@ -457,6 +459,7 @@ async function _uninstallClaudeHooksNow() {
 // and the startup hydration helper. Throws on failure so the action layer can
 // surface the error to the UI.
 function _writeSystemOpenAtLogin(enabled) {
+  if (nativeLoginItem) { nativeLoginItem.write(enabled); return; }
   if (crosspetServiceMode) return; // CrossPet's original host owns login startup.
   if (isLinux) {
     const launchScript = path.join(__dirname, "..", "launch.js");
@@ -476,6 +479,7 @@ function _writeSystemOpenAtLogin(enabled) {
   );
 }
 function _readSystemOpenAtLogin() {
+  if (nativeLoginItem) return nativeLoginItem.read();
   if (isLinux) return loginItemHelpers.linuxGetOpenAtLogin();
   return app.getLoginItemSettings(
     app.isPackaged ? {} : { path: process.execPath, args: [app.getAppPath()] }
@@ -827,12 +831,13 @@ function getDashboardI18nPayload() {
 // only stable after the app is ready. MUST run before createWindow() so the
 // first menu render reads the hydrated value.
 function hydrateSystemBackedSettings() {
-  if (_settingsController.get("openAtLoginHydrated")) return;
+  if (!nativeLoginItem && _settingsController.get("openAtLoginHydrated")) return;
   let systemValue = false;
   try {
     systemValue = !!_readSystemOpenAtLogin();
   } catch (err) {
     console.warn("Clawd: failed to read system openAtLogin during hydration:", err && err.message);
+    if (nativeLoginItem) return;
   }
   const result = _settingsController.hydrate({
     openAtLogin: systemValue,
@@ -5397,6 +5402,7 @@ const settingsIpcRuntime = registerSettingsIpc({
   path,
   settingsController: _settingsController,
   recapRuntime,
+  refreshSystemBackedSettings: nativeLoginItem ? hydrateSystemBackedSettings : null,
   getQuotaSourceCount: () => _state.getQuotaSourceCount(),
   getQuotaRingProviders: () => _ringGeom.listQuotaRingProviders(
     _state.buildSessionSnapshot(),

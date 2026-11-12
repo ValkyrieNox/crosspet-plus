@@ -466,7 +466,12 @@ function registerSettingsIpc(options = {}) {
     }
   }
 
-  handle("settings:get-snapshot", () => settingsController.getSnapshot());
+  handle("settings:get-snapshot", () => {
+    // The native host and Windows Task Manager can change login startup while
+    // this service is running. Import OS truth through the sole store writer.
+    options.refreshSystemBackedSettings?.();
+    return settingsController.getSnapshot();
+  });
   handle("settings:recap-query", async (event, period) => {
     const rejected = rejectUntrustedSettingsEvent(event);
     if (rejected) return rejected;

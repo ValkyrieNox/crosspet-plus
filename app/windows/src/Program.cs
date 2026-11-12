@@ -90,6 +90,7 @@ namespace CrossPet
         [STAThread]
         static void Main(string[] args)
         {
+            if (WindowsLogin.HandleCommand(args)) return;
             SetCurrentProcessExplicitAppUserModelID("com.valkyrienox.crosspet-plus");
             if (!RenderRecovery.WaitForParent(args)) return;
             if (SelfInstall && args.Length == 0 && !FromInstallDir()) return;   // 放在「只开一个」前面：已装的旧版开着时，双击新版的安装包也要能装
